@@ -1,21 +1,26 @@
 services:
+  # Single all-in-one service: the Docker build compiles the React frontend and
+  # serves it from the same FastAPI process as the API, so there is no CORS
+  # setup and no second deploy to keep in sync.
+  #
+  # Docker (not `runtime: python`) because the build needs Node to produce
+  # frontend/dist — that directory is a gitignored build artifact, and a
+  # Python-only build would leave it missing.
   - type: web
-    name: paypilot-api
-    runtime: python
+    name: paypilot
+    runtime: docker
     plan: free
-    buildCommand: pip install -r requirements.txt && python -m rag.build_index
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    dockerfilePath: ./Dockerfile
     healthCheckPath: /health
     envVars:
-      - key: PYTHON_VERSION
-        value: 3.11.9
-      # Set this once the Vercel frontend URL is known, e.g.
-      # https://paypilot.vercel.app (comma-separate multiple origins).
+      # Only needed if you later deploy the frontend separately (e.g. Vercel)
+      # and point it at this API — comma-separated origins. Unset is correct
+      # for the all-in-one setup above.
       - key: ALLOWED_ORIGINS
         sync: false
+      # Optional: without real Razorpay test keys every tool call returns
+      # deterministic mock data, so the app is fully functional unset.
       - key: RAZORPAY_KEY_ID
         sync: false
       - key: RAZORPAY_KEY_SECRET
-        sync: false
-      - key: ANTHROPIC_API_KEY
         sync: false

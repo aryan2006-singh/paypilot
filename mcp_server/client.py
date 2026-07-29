@@ -5,6 +5,7 @@ MCP server separately from the FastAPI app.
 from __future__ import annotations
 
 import asyncio
+import sys
 from typing import Any
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
@@ -25,7 +26,11 @@ async def _get_client() -> MultiServerMCPClient:
                 client = MultiServerMCPClient(
                     {
                         "paypilot": {
-                            "command": "python",
+                            # sys.executable, not bare "python" — the subprocess
+                            # must run under the same interpreter/venv as the
+                            # API or it won't find the installed dependencies
+                            # (and on some hosts "python" isn't on PATH at all).
+                            "command": sys.executable,
                             "args": ["-m", "mcp_server.tools"],
                             "transport": "stdio",
                         }

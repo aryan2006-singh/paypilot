@@ -1,8 +1,13 @@
+.git
 .venv
 .env
+.claude
 __pycache__
 **/__pycache__
 *.pyc
+# Build artifacts the image regenerates itself — frontend/dist in particular
+# must stay out, or `COPY . .` would clobber the frontend-build stage output.
 frontend/node_modules
 frontend/dist
+rag/indexes
 paypilot_fixed_zip_src

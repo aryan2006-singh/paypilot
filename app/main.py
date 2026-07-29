@@ -23,7 +23,7 @@ load_dotenv()  # must run before mcp_server.tools reads RAZORPAY_* env vars belo
 
 from agents.graph import build_graph, PayPilotState, INTENTS
 from mcp_server.tools import _is_configured
-from rag.retriever import INDEX_DIR
+from rag.retriever import index_exists
 
 # Built by `npm run build` in frontend/ — lives one level up from app/ so both
 # this all-in-one FastAPI serving mode (local dev, Docker) and a separately
@@ -191,7 +191,7 @@ async def activity(limit: int = 20):
 @app.get("/api/config")
 async def config():
     rag_status = {
-        namespace: (INDEX_DIR / f"{namespace}.faiss").exists()
+        namespace: index_exists(namespace)
         for namespace in AGENT_META
         if namespace != "fraud"  # fraud agent has no RAG namespace
     }
@@ -209,4 +209,24 @@ async def config():
 # above. The SPA uses hash-based routing (#/chat, #/agents, …), so the
 # browser only ever requests "/" from the server — no server-side catch-all
 # for client routes is needed.
-app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="spa")
+#
+# Mounted conditionally: StaticFiles raises at construction if the directory
+# is absent, which would take down the whole API. frontend/dist is a build
+# artifact (gitignored), so it is legitimately missing whenever the frontend
+# is deployed separately or the build step hasn't run — degrade to an
+# API-only service with a diagnostic at "/" instead of failing to boot.
+if FRONTEND_DIST.is_dir():
+    app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="spa")
+else:
+    @app.get("/")
+    async def missing_frontend():
+        return {
+            "status": "api-only",
+            "detail": (
+                "Frontend build not found at frontend/dist. Run "
+                "`npm ci && npm run build` in frontend/ to serve the UI from "
+                "this service, or point a separately deployed frontend at "
+                "this API."
+            ),
+            "api": ["/health", "/chat", "/chat/stream", "/api/agents", "/api/stats", "/api/activity", "/api/config"],
+        }

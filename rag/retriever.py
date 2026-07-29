@@ -1,6 +1,7 @@
-"""FAISS + sentence-transformers retriever, namespaced by agent domain.
+"""TF-IDF retriever over the policy corpus, namespaced by agent domain.
 
-Run build_index.py once to populate indexes/ from docs/*.md before using this.
+Run `python -m rag.build_index` once to populate indexes/ from docs/*.md
+before using this (the deploy build command does it automatically).
 """
 from __future__ import annotations
 
@@ -8,39 +9,41 @@ import pickle
 from functools import lru_cache
 from pathlib import Path
 
-import faiss
-from sentence_transformers import SentenceTransformer
+from rag import tfidf
 
 INDEX_DIR = Path(__file__).parent / "indexes"
-MODEL_NAME = "all-MiniLM-L6-v2"
+
+_REQUIRED_KEYS = {"vocab", "idf", "matrix", "chunks"}
+
+
+def index_path(namespace: str) -> Path:
+    return INDEX_DIR / f"{namespace}.pkl"
+
+
+def index_exists(namespace: str) -> bool:
+    """Whether a usable index is on disk — surfaced by /api/config so the
+    Settings page can show which namespaces are actually ready."""
+    return _load_namespace(namespace) is not None
 
 
 @lru_cache
-def _model() -> SentenceTransformer:
-    return SentenceTransformer(MODEL_NAME)
-
-
-@lru_cache
-def _load_namespace(namespace: str):
-    idx_path = INDEX_DIR / f"{namespace}.faiss"
-    meta_path = INDEX_DIR / f"{namespace}.pkl"
-    if not idx_path.exists():
-        return None, None
-    index = faiss.read_index(str(idx_path))
-    with open(meta_path, "rb") as f:
-        chunks = pickle.load(f)
-    return index, chunks
+def _load_namespace(namespace: str) -> dict | None:
+    path = index_path(namespace)
+    if not path.exists():
+        return None
+    with open(path, "rb") as f:
+        index = pickle.load(f)
+    # Guards against an index left over from an older build format — treat it
+    # as missing so the caller degrades gracefully instead of raising.
+    if not isinstance(index, dict) or not _REQUIRED_KEYS <= index.keys():
+        return None
+    return index
 
 
 async def retrieve_context(query: str, namespace: str = "general", k: int = 3) -> str:
-    index, chunks = _load_namespace(namespace)
+    index = _load_namespace(namespace)
     if index is None:
-        return "(no index built yet for this namespace — run rag/build_index.py)"
+        return "(no index built yet for this namespace — run python -m rag.build_index)"
 
-    query_vec = _model().encode([query])
-    distances, indices = index.search(query_vec, k)
-    # FAISS pads missing matches with -1 when k exceeds the index size; Python's
-    # negative indexing would silently wrap that to chunks[-1] and duplicate the
-    # last chunk, so exclude anything outside [0, len(chunks)) explicitly.
-    results = [chunks[i] for i in indices[0] if 0 <= i < len(chunks)]
+    results = tfidf.search(index, query, k)
     return "\n---\n".join(results) if results else "(no relevant context found)"
