@@ -1,0 +1,5 @@
+{"message": "Where is my refund for pay_MK7Xyz123?", "expected_agent": "refunds"}
+{"message": "Why did payment pay_ABC999 fail?", "expected_agent": "payments"}
+{"message": "This transaction looks suspicious, can you check it?", "expected_agent": "fraud"}
+{"message": "Does settlement stl_44 match our ledger?", "expected_agent": "reconciliation"}
+{"message": "What are your business hours?", "expected_agent": "general"}
