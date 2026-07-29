@@ -5,13 +5,42 @@ MCP server separately from the FastAPI app.
 from __future__ import annotations
 
 import asyncio
+import os
 import sys
 from typing import Any
 
 from langchain_mcp_adapters.client import MultiServerMCPClient
+from mcp.client.stdio import get_default_environment
 
 _client: MultiServerMCPClient | None = None
 _client_lock = asyncio.Lock()
+
+# Credentials mcp_server/tools.py reads out of the environment.
+_FORWARDED_ENV_VARS = ("RAZORPAY_KEY_ID", "RAZORPAY_KEY_SECRET")
+
+
+def _server_env() -> dict[str, str]:
+    """Environment for the tool subprocess.
+
+    The MCP SDK does *not* inherit the parent environment for stdio servers —
+    when `env` is omitted it substitutes a fixed allowlist (HOME/PATH/USER/…
+    see mcp.client.stdio.get_default_environment). RAZORPAY_* would therefore
+    be stripped and tools.py would fall back to mock data even with real keys
+    configured, while /api/config — evaluated in *this* process, which does
+    have them — kept reporting "configured".
+
+    This only ever bit a real deployment: tools.py also calls load_dotenv(),
+    so a local .env masked the problem, and .env is dockerignored.
+
+    Start from the SDK's allowlist so its safety posture is preserved, then
+    forward just the variables the tool server actually needs.
+    """
+    env = get_default_environment()
+    for name in _FORWARDED_ENV_VARS:
+        value = os.environ.get(name)
+        if value is not None:
+            env[name] = value
+    return env
 
 
 async def _get_client() -> MultiServerMCPClient:
@@ -33,6 +62,7 @@ async def _get_client() -> MultiServerMCPClient:
                             "command": sys.executable,
                             "args": ["-m", "mcp_server.tools"],
                             "transport": "stdio",
+                            "env": _server_env(),
                         }
                     }
                 )
