@@ -5,8 +5,28 @@ import type { ActivityEntry, AgentMeta, ChatResponse, Config, Stats } from "./ty
 // the backend (e.g. this on Vercel, the API on Render/Railway).
 const BASE = import.meta.env.VITE_API_URL ?? "";
 
+/** Turns a failed response into a short, human-readable error message. */
 async function json<T>(res: Response): Promise<T> {
-  if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
+  if (!res.ok) {
+    let detail = "";
+    try {
+      const body = await res.text();
+      try {
+        const parsed = JSON.parse(body);
+        detail = typeof parsed.detail === "string" ? parsed.detail : JSON.stringify(parsed.detail ?? parsed);
+      } catch {
+        detail = body.slice(0, 200);
+      }
+    } catch {
+      /* ignore */
+    }
+    const friendly =
+      res.status === 429 ? "Too many requests, please wait a moment and try again."
+      : res.status === 401 || res.status === 403 ? "You are not authorised to call the API."
+      : res.status >= 500 ? "The server hit an error. Please try again."
+      : `Request failed (${res.status}).`;
+    throw new Error(detail ? `${friendly} ${detail}` : friendly);
+  }
   return res.json() as Promise<T>;
 }
 
