@@ -48,3 +48,20 @@ export interface Config {
   rag_index_ready: Record<string, boolean>;
   intents: string[];
 }
+
+export type StepStatus = "running" | "done" | "error";
+
+export interface AgentStep {
+  id: string;
+  label: string;
+  status: StepStatus;
+  detail?: string;
+}
+
+/** One server-sent event from POST /chat/stream (see app/main.py). */
+export type StreamEvent =
+  | ({ type: "step" } & AgentStep)
+  | { type: "meta"; agent_used: AgentId; intent: string; entity_id: string | null }
+  | { type: "token"; text: string }
+  | { type: "done"; response: ChatResponse }
+  | { type: "error"; message: string };

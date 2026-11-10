@@ -5,7 +5,9 @@ and dependency injection for the agent graph (closes the FastAPI gap).
 """
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
 import os
 import time
 from collections import deque
@@ -108,6 +110,31 @@ def get_graph():
     return build_graph()
 
 
+def _log_activity(message: str, session_id: str, result: dict) -> None:
+    tool_result = result.get("tool_result")
+    ACTIVITY_LOG.appendleft({
+        "timestamp": time.time(),
+        "message": message[:200],
+        "agent_used": result["agent_used"],
+        "intent": result["intent"],
+        "entity_id": result.get("entity_id"),
+        "mock": bool(tool_result.get("mock")) if tool_result else None,
+        "session_id": session_id,
+    })
+
+
+def _to_response(result: dict, session_id: str) -> ChatResponse:
+    return ChatResponse(
+        reply=result["reply"],
+        agent_used=result["agent_used"],
+        session_id=session_id,
+        intent=result["intent"],
+        policy_context=result.get("policy_context"),
+        tool_result=result.get("tool_result"),
+        entity_id=result.get("entity_id"),
+    )
+
+
 @app.post("/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest, graph=Depends(get_graph)) -> ChatResponse:
     state: PayPilotState = {
@@ -116,42 +143,107 @@ async def chat(req: ChatRequest, graph=Depends(get_graph)) -> ChatResponse:
         "history": [],
     }
     result = await graph.ainvoke(state)
-    tool_result = result.get("tool_result")
-    ACTIVITY_LOG.appendleft({
-        "timestamp": time.time(),
-        "message": req.message[:200],
-        "agent_used": result["agent_used"],
-        "intent": result["intent"],
-        "entity_id": result.get("entity_id"),
-        "mock": bool(tool_result.get("mock")) if tool_result else None,
-        "session_id": state["session_id"],
-    })
-    return ChatResponse(
-        reply=result["reply"],
-        agent_used=result["agent_used"],
-        session_id=state["session_id"],
-        intent=result["intent"],
-        policy_context=result.get("policy_context"),
-        tool_result=tool_result,
-        entity_id=result.get("entity_id"),
-    )
+    _log_activity(req.message, state["session_id"], result)
+    return _to_response(result, state["session_id"])
+
+
+_ROUTER_LABEL = "Classifying your request"
+
+# What each specialist does while it runs, shown as the live "working" step
+# in the chat UI until the node returns.
+_AGENT_WORK = {
+    "payments": "Checking payment policy and live payment status",
+    "refunds": "Checking refund policy and refund records",
+    "reconciliation": "Checking reconciliation policy and matching the settlement",
+    "fraud": "Running the risk-scoring rules",
+    "general": "Searching the support policy",
+}
+
+# Small pause between reply chunks so the reply visibly streams in. The
+# specialists build their reply from a template today; when an LLM writes the
+# reply instead, forward its token stream here and drop the delay.
+_TOKEN_DELAY_S = 0.02
+
+
+def _sse(event: dict) -> str:
+    return f"data: {json.dumps(event, default=str)}\n\n"
+
+
+def _agent_summary(output: dict) -> str:
+    """One line describing what a specialist found, for its completed step."""
+    tool = output.get("tool_result")
+    parts = []
+    if output.get("policy_context"):
+        parts.append("policy found")
+    if tool:
+        if tool.get("error"):
+            parts.append(f"tool: {tool['error']}")
+        elif tool.get("mock"):
+            parts.append("tool returned demo data")
+        else:
+            parts.append("live tool result")
+    return ", ".join(parts) or "done"
 
 
 @app.post("/chat/stream")
 async def chat_stream(req: ChatRequest, graph=Depends(get_graph)):
-    """Streams intermediate agent steps as SSE — shows the routing decision live."""
+    """Streams the agent run as server-sent events.
+
+    Each event is a JSON object with a `type`:
+      step   {id, label, status: running|done|error, detail?}  agent progress
+      meta   {agent_used, intent, entity_id}                    routing result
+      token  {text}                                             reply chunk
+      done   {response: ChatResponse}                           final payload
+      error  {message}                                          run failed
+    """
 
     async def event_gen():
+        session_id = req.session_id or "anon"
         state: PayPilotState = {
             "message": req.message,
-            "session_id": req.session_id or "anon",
+            "session_id": session_id,
             "history": [],
         }
-        async for chunk in graph.astream(state):
-            for node_name, node_output in chunk.items():
-                yield f"data: {json.dumps({'node': node_name, 'output': node_output})}\n\n"
+        final: dict = {}
+        running: tuple[str, str] | None = ("router", _ROUTER_LABEL)
+        try:
+            yield _sse({"type": "step", "id": "router", "label": _ROUTER_LABEL, "status": "running"})
+            async for chunk in graph.astream(state):
+                for node_name, output in chunk.items():
+                    final.update(output)
+                    if node_name == "router":
+                        intent = output["intent"]
+                        yield _sse({"type": "step", "id": "router", "label": _ROUTER_LABEL,
+                                    "status": "done", "detail": f"Routed to {intent}"})
+                        yield _sse({"type": "meta", "agent_used": intent, "intent": intent, "entity_id": None})
+                        running = (intent, _AGENT_WORK.get(intent, "Working"))
+                        yield _sse({"type": "step", "id": running[0], "label": running[1], "status": "running"})
+                    else:
+                        running = None
+                        yield _sse({"type": "step", "id": node_name, "label": _AGENT_WORK.get(node_name, "Working"),
+                                    "status": "done", "detail": _agent_summary(output)})
+                        yield _sse({"type": "meta", "agent_used": output["agent_used"],
+                                    "intent": final.get("intent", node_name), "entity_id": output.get("entity_id")})
 
-    return StreamingResponse(event_gen(), media_type="text/event-stream")
+            words = final.get("reply", "").split(" ")
+            for i, word in enumerate(words):
+                yield _sse({"type": "token", "text": word if i == 0 else " " + word})
+                await asyncio.sleep(_TOKEN_DELAY_S)
+
+            _log_activity(req.message, session_id, final)
+            yield _sse({"type": "done", "response": _to_response(final, session_id).model_dump()})
+        except Exception as exc:  # surfaced to the UI instead of a silently dropped stream
+            logging.getLogger(__name__).exception("chat stream failed")
+            if running:
+                yield _sse({"type": "step", "id": running[0], "label": running[1], "status": "error"})
+            yield _sse({"type": "error", "message": f"{type(exc).__name__}: {exc}"})
+
+    return StreamingResponse(
+        event_gen(),
+        media_type="text/event-stream",
+        # Stops proxies (nginx, Render's edge) from buffering the whole stream.
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.get("/health")

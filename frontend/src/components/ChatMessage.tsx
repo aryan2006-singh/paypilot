@@ -1,7 +1,7 @@
 import { Fragment, useState } from "react";
 import { motion } from "framer-motion";
-import { FileText, Wrench, Copy, Check, User, AlertTriangle, RotateCw, ChevronRight, Braces } from "lucide-react";
-import type { AgentMeta, ChatResponse } from "../types";
+import { FileText, Wrench, Copy, Check, User, AlertTriangle, RotateCw, ChevronRight, Braces, CircleCheck, CircleAlert, Loader2 } from "lucide-react";
+import type { AgentMeta, AgentStep, ChatResponse } from "../types";
 import { StatusChip } from "./Chips";
 import { BrandMark } from "./Sidebar";
 
@@ -18,7 +18,13 @@ export interface BotMessage {
   error?: boolean;
   /** The user text to resend when the person presses Retry. */
   retryText?: string;
-  data: Partial<ChatResponse> & { reply: string; agent_used: string };
+  /** Agent steps received from /chat/stream, in order. */
+  steps?: AgentStep[];
+  /** The reply is still streaming in. */
+  streaming?: boolean;
+  /** The person pressed Stop; `data.reply` holds whatever had arrived. */
+  stopped?: boolean;
+  data: Omit<Partial<ChatResponse>, "agent_used"> & { reply: string; agent_used: string };
 }
 
 export type ChatItem = UserMessage | BotMessage;
@@ -75,6 +81,30 @@ function Details({ icon: Icon, title, badge, defaultOpen, children }: { icon: ty
   );
 }
 
+function StepIcon({ status }: { status: AgentStep["status"] }) {
+  if (status === "running") return <Loader2 size={13} className="animate-spin text-[var(--accent)]" aria-label="In progress" />;
+  if (status === "error") return <CircleAlert size={13} style={{ color: "var(--critical)" }} aria-label="Failed" />;
+  return <CircleCheck size={13} style={{ color: "var(--ok)" }} aria-label="Done" />;
+}
+
+function StepRows({ steps }: { steps: AgentStep[] }) {
+  return (
+    <ol className="space-y-1 text-[12.5px]">
+      {steps.map((step) => (
+        <motion.li key={step.id} initial={{ opacity: 0, x: -4 }} animate={{ opacity: 1, x: 0 }} className="flex items-start gap-2">
+          <span className="mt-[3px] shrink-0">
+            <StepIcon status={step.status} />
+          </span>
+          <span className={step.status === "running" ? "text-[var(--text)]" : "text-[var(--text-dim)]"}>
+            {step.label}
+            {step.detail && <span className="text-[var(--text-muted)]"> · {step.detail}</span>}
+          </span>
+        </motion.li>
+      ))}
+    </ol>
+  );
+}
+
 export function ThinkingBubble() {
   return (
     <div className="flex gap-3" aria-label="PayPilot is thinking">
@@ -110,7 +140,7 @@ export function ChatMessageView({ item, agentMeta, onRetry }: { item: ChatItem; 
     );
   }
 
-  const { data } = item;
+  const { data, steps, streaming, stopped } = item;
 
   if (item.error) {
     return (
@@ -152,17 +182,49 @@ export function ChatMessageView({ item, agentMeta, onRetry }: { item: ChatItem; 
           <span className="sr-only">PayPilot, </span>
           <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--surface-3)] py-[3px] pl-2 pr-2.5 text-[11.5px] font-semibold">
             <span aria-hidden className="h-[7px] w-[7px] shrink-0 rounded-full" style={{ background: agentMeta?.color ?? "#888" }} />
-            {agentMeta?.label ?? data.agent_used}
+            {agentMeta?.label ?? (data.agent_used || (streaming ? "Routing…" : "PayPilot"))}
           </span>
           {data.entity_id && <code className="inline-code !text-[11px]">{data.entity_id}</code>}
           <span className="text-[11px] text-[var(--text-muted)]">{item.time}</span>
         </div>
 
-        <div className="whitespace-pre-wrap break-words rounded-2xl rounded-tl-md border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-[14.5px] leading-relaxed shadow-[var(--shadow-sm)]">
-          {data.reply}
-        </div>
+        {steps && steps.length > 0 &&
+          (streaming ? (
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2" aria-live="polite">
+              <div className="mb-1.5 text-[11.5px] font-semibold uppercase tracking-wide text-[var(--text-muted)]">Working</div>
+              <StepRows steps={steps} />
+            </div>
+          ) : (
+            <Details icon={CircleCheck} title={`Agent steps (${steps.length})`}>
+              <StepRows steps={steps} />
+            </Details>
+          ))}
 
-        {data.tool_result && (
+        {(data.reply || !streaming) && (
+          <div className="whitespace-pre-wrap break-words rounded-2xl rounded-tl-md border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-[14.5px] leading-relaxed shadow-[var(--shadow-sm)]">
+            {data.reply || (stopped ? <span className="text-[var(--text-muted)]">No reply yet.</span> : null)}
+            {streaming && (
+              <span aria-hidden className="ml-0.5 inline-block h-[1em] w-[2px] translate-y-[2px] animate-pulse bg-[var(--text-muted)]" />
+            )}
+          </div>
+        )}
+
+        {stopped && (
+          <div className="flex items-center gap-2 text-[12.5px] text-[var(--text-muted)]">
+            Stopped before the reply finished.
+            {onRetry && (
+              <button
+                type="button"
+                onClick={onRetry}
+                className="inline-flex h-7 items-center gap-1 rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 text-[12px] font-medium text-[var(--text)] hover:bg-[var(--surface-2)]"
+              >
+                <RotateCw size={12} aria-hidden /> Retry
+              </button>
+            )}
+          </div>
+        )}
+
+        {!streaming && data.tool_result && (
           <Details
             icon={Wrench}
             title="Tool result"
@@ -186,16 +248,16 @@ export function ChatMessageView({ item, agentMeta, onRetry }: { item: ChatItem; 
           </Details>
         )}
 
-        {data.policy_context && (
+        {!streaming && data.policy_context && (
           <Details icon={FileText} title="Policy context">
             <div className="whitespace-pre-wrap text-[13px] leading-relaxed text-[var(--text-dim)]">{data.policy_context}</div>
           </Details>
         )}
 
-        <div className="flex gap-0.5 opacity-60 transition-opacity group-hover:opacity-100 focus-within:opacity-100 max-md:opacity-100">
+        {!streaming && !stopped && <div className="flex gap-0.5 opacity-60 transition-opacity group-hover:opacity-100 focus-within:opacity-100 max-md:opacity-100">
           <IconAction icon={Copy} label="Copy" done={copied === "reply"} onClick={() => copy("reply", data.reply)} />
           <IconAction icon={Braces} label="Copy JSON" done={copied === "json"} onClick={() => copy("json", JSON.stringify(data, null, 2))} />
-        </div>
+        </div>}
       </div>
     </motion.div>
   );
