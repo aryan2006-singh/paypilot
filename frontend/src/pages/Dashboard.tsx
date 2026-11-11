@@ -4,6 +4,7 @@ import { Activity, MessageSquare, RotateCw, Zap, FlaskConical, Trophy, ArrowUpRi
 import { PageHeader } from "../components/PageHeader";
 import { StatTile } from "../components/StatTile";
 import { Card } from "../components/Card";
+import { RecentPayments } from "../components/RecentPayments";
 import { AgentBarChart } from "../components/AgentBarChart";
 import { AgentChip, StatusChip } from "../components/Chips";
 import { Button, EmptyState, ErrorState, Skeleton } from "../components/States";
@@ -82,7 +83,7 @@ export function Dashboard() {
     [activity.data, filter],
   );
 
-  const openInChat = (entry: ActivityEntry) => navigate(`/chat?q=${encodeURIComponent(entry.message)}`);
+  const openInChat = (entry: ActivityEntry) => navigate(`/app/chat?q=${encodeURIComponent(entry.message)}`);
   const refreshing = stats.refreshing || activity.refreshing;
 
   return (
@@ -97,7 +98,7 @@ export function Dashboard() {
           Refresh
         </Button>
         <Link
-          to="/chat"
+          to="/app/chat"
           className="brand-gradient inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[12.5px] font-semibold text-white hover:opacity-90"
         >
           <MessageSquare size={13} aria-hidden /> New query
@@ -157,11 +158,13 @@ export function Dashboard() {
           {stats.data ? <SourceSplit stats={stats.data} /> : <Skeleton className="h-10" />}
           {stats.data && stats.data.mock_count > 0 && stats.data.live_count === 0 && (
             <p className="mt-4 rounded-lg bg-[var(--surface-2)] px-3 py-2 text-[12px] leading-relaxed text-[var(--text-muted)]">
-              All tool calls used demo data. Add Razorpay keys to switch to live data. <Link className="font-medium text-[var(--accent-text)] hover:underline" to="/settings">View settings</Link>
+              All tool calls used demo data. Add Razorpay keys to switch to live data. <Link className="font-medium text-[var(--accent-text)] hover:underline" to="/app/settings">View settings</Link>
             </p>
           )}
         </Card>
       </div>
+
+      <RecentPayments />
 
       <Card
         title="Recent activity"
@@ -201,7 +204,7 @@ export function Dashboard() {
             body={filter === "all" ? "Ask PayPilot about a payment, refund or settlement and it will show up here." : "Try another agent, or show all agents."}
             action={
               filter === "all" ? (
-                <Link to="/chat" className="brand-gradient inline-flex h-9 items-center gap-1.5 rounded-lg px-3.5 text-[13px] font-semibold text-white">
+                <Link to="/app/chat" className="brand-gradient inline-flex h-9 items-center gap-1.5 rounded-lg px-3.5 text-[13px] font-semibold text-white">
                   <MessageSquare size={14} aria-hidden /> Start a chat
                 </Link>
               ) : (

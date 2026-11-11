@@ -4,7 +4,7 @@ import type { AgentMeta } from "../types";
 import { BrandMark } from "./Sidebar";
 import { Skeleton } from "./States";
 
-const ICONS: Record<string, LucideIcon> = {
+export const AGENT_ICONS: Record<string, LucideIcon> = {
   payments: CreditCard,
   refunds: RotateCcw,
   reconciliation: Scale,
@@ -26,7 +26,7 @@ export function ChatWelcome({ agents, onPick, disabled }: { agents: AgentMeta[] 
       <div className="mt-6 grid w-full max-w-[720px] grid-cols-2 gap-2.5 text-left max-sm:grid-cols-1">
         {agents
           ? agents.map((agent, i) => {
-              const Icon = ICONS[agent.id] ?? Bot;
+              const Icon = AGENT_ICONS[agent.id] ?? Bot;
               return (
                 <motion.button
                   key={agent.id}

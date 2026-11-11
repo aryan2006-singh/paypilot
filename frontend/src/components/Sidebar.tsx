@@ -1,13 +1,14 @@
 import { NavLink } from "react-router-dom";
-import { LayoutDashboard, MessageSquare, Layers, Settings, Moon, Sun, Sparkles } from "lucide-react";
+import { LayoutDashboard, MessageSquare, History, Layers, Settings, Moon, Sun, Sparkles } from "lucide-react";
 import { useTheme } from "../hooks/useTheme";
 import { useHealth } from "../hooks/useHealth";
 
 export const NAV_ITEMS = [
-  { to: "/", label: "Dashboard", icon: LayoutDashboard, end: true },
-  { to: "/chat", label: "Chat", icon: MessageSquare, end: false },
-  { to: "/agents", label: "Agents", icon: Layers, end: false },
-  { to: "/settings", label: "Settings", icon: Settings, end: false },
+  { to: "/app", label: "Dashboard", icon: LayoutDashboard, end: true },
+  { to: "/app/chat", label: "Chat", icon: MessageSquare, end: false },
+  { to: "/app/history", label: "History", icon: History, end: false },
+  { to: "/app/agents", label: "Agents", icon: Layers, end: false },
+  { to: "/app/settings", label: "Settings", icon: Settings, end: false },
 ];
 
 export function BrandMark({ size = 32 }: { size?: number }) {
@@ -47,12 +48,12 @@ export function Sidebar() {
         <BrandMark />
         <div>
           <div className="text-[15px] font-semibold tracking-tight">PayPilot</div>
-          <div className="text-[11px] text-[var(--text-muted)]">Payments Ops Console</div>
+          <NavLink to="/" className="text-[11px] text-[var(--text-muted)] hover:text-[var(--text)]">← Back to website</NavLink>
         </div>
       </div>
 
       <NavLink
-        to="/chat"
+        to="/app/chat"
         className="brand-gradient mb-4 flex h-9 items-center justify-center gap-2 rounded-[10px] text-[13px] font-semibold text-white shadow-[var(--shadow-sm)] transition-opacity hover:opacity-90"
       >
         <Sparkles size={14} aria-hidden /> Ask PayPilot

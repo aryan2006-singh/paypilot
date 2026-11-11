@@ -12,12 +12,9 @@ import type { AgentStep } from "../types";
 
 const MAX_CHARS = 2000; // mirrors ChatRequest.message max_length on the API
 
-function newSessionId() {
-  return "web-" + Math.random().toString(36).slice(2, 10);
-}
-
 // Module-level so the conversation survives navigating away and back (SPA, no reload).
-let sessionId = newSessionId();
+// null until the server assigns a conversation id on the first message.
+let sessionId: string | null = null;
 let chatHistory: ChatItem[] = [];
 
 function nowLabel() {
@@ -35,7 +32,42 @@ export function Chat() {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  // Prefill from links like #/chat?q=... (Agents "Try it", Dashboard "Ask again").
+  // Open a saved conversation from History (#/app/chat?c=<id>).
+  useEffect(() => {
+    const id = params.get("c");
+    if (!id) return;
+    setParams({}, { replace: true });
+    api
+      .conversation(id)
+      .then((conv) => {
+        const items: ChatItem[] = conv.messages.map((m) => {
+          const time = new Date(m.created_at * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+          if (m.role === "user") return { kind: "user", text: m.content, time };
+          return {
+            kind: "bot",
+            time,
+            data: {
+              reply: m.content,
+              agent_used: m.agent_used ?? "general",
+              intent: m.intent ?? undefined,
+              entity_id: m.entity_id,
+              tool_result: m.tool_result,
+              policy_context: m.policy_context,
+              session_id: conv.id,
+            },
+          };
+        });
+        sessionId = conv.id;
+        chatHistory = items;
+        setHistory(items);
+      })
+      .catch((err) => {
+        chatHistory = [{ kind: "bot", time: nowLabel(), error: true, data: { agent_used: "general", reply: describeError(err as Error) } }];
+        setHistory(chatHistory);
+      });
+  }, [params, setParams]);
+
+  // Prefill from links like #/app/chat?q=... (Agents "Try it", Dashboard "Ask again").
   useEffect(() => {
     const q = params.get("q");
     if (q) {
@@ -118,6 +150,7 @@ export function Chat() {
               break;
             }
             case "meta":
+              if (event.session_id) sessionId = event.session_id;
               patch(index, (m) => ({
                 ...m,
                 data: { ...m.data, agent_used: event.agent_used, intent: event.intent, entity_id: event.entity_id },
@@ -128,6 +161,7 @@ export function Chat() {
               break;
             case "done":
               finished = true;
+              if (event.response.session_id) sessionId = event.response.session_id;
               patch(index, (m) => ({ ...m, streaming: false, data: event.response }));
               break;
             case "error":
@@ -161,7 +195,7 @@ export function Chat() {
 
   function newChat() {
     chatHistory = [];
-    sessionId = newSessionId();
+    sessionId = null;
     setHistory([]);
     setInput("");
     textareaRef.current?.focus();

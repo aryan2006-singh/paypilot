@@ -1,12 +1,12 @@
 import { Monitor, Moon, Sun, Copy, Check } from "lucide-react";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { PageHeader } from "../components/PageHeader";
 import { Card } from "../components/Card";
 import { Pill } from "../components/Chips";
 import { ErrorState, Skeleton } from "../components/States";
 import { useAsync } from "../hooks/useAsync";
 import { useTheme, type ThemePref } from "../hooks/useTheme";
-import { api } from "../api";
+import { api, auth } from "../api";
 
 function Row({ label, hint, right }: { label: string; hint?: string; right: React.ReactNode }) {
   return (
@@ -73,6 +73,70 @@ function CopyValue({ value }: { value: string }) {
   );
 }
 
+function ApiKeyCard({ required }: { required: boolean | undefined }) {
+  const saved = useSyncExternalStore(auth.subscribe, auth.get);
+  const [draft, setDraft] = useState("");
+  const [state, setState] = useState<"idle" | "checking" | "bad">("idle");
+
+  async function save() {
+    const key = draft.trim();
+    if (!key) return;
+    setState("checking");
+    try {
+      const ok = await api.checkKey(key);
+      if (ok) {
+        auth.set(key);
+        setDraft("");
+        setState("idle");
+      } else setState("bad");
+    } catch {
+      setState("bad");
+    }
+  }
+
+  return (
+    <Card title="API key" description={required ? "This server requires a key." : "Optional: this server currently accepts requests without a key."}>
+      <Row
+        label="Status"
+        hint="Stored in this browser only and sent as X-API-Key."
+        right={<Pill ok={!!saved || required === false} yesLabel={saved ? "Key saved" : "Not needed"} noLabel="Key needed" />}
+      />
+      <form
+        className="mt-3 flex gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          save();
+        }}
+      >
+        <label htmlFor="api-key" className="sr-only">
+          API key
+        </label>
+        <input
+          id="api-key"
+          type="password"
+          autoComplete="off"
+          value={draft}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            setState("idle");
+          }}
+          placeholder={saved ? "Replace saved key" : "Paste your API key"}
+          className="h-9 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-2)] px-3 text-[13px] outline-none focus:border-[var(--accent)] max-md:text-[16px]"
+        />
+        <button type="submit" disabled={!draft.trim() || state === "checking"} className="brand-gradient h-9 rounded-lg px-3.5 text-[13px] font-semibold text-white disabled:opacity-50">
+          {state === "checking" ? "Checking…" : "Save"}
+        </button>
+        {saved && (
+          <button type="button" onClick={() => auth.set("")} className="h-9 rounded-lg border border-[var(--border)] px-3 text-[13px] hover:border-[var(--accent)]">
+            Remove
+          </button>
+        )}
+      </form>
+      {state === "bad" && <p role="alert" className="mt-2 text-[12.5px] text-[var(--critical)]">The server rejected that key.</p>}
+    </Card>
+  );
+}
+
 export function Settings() {
   const config = useAsync(api.config);
   const apiUrl = (import.meta.env.VITE_API_URL as string | undefined) || window.location.origin;
@@ -93,6 +157,8 @@ export function Settings() {
           <Row label="API endpoint" right={<CopyValue value={apiUrl} />} />
         </Card>
 
+        <ApiKeyCard required={config.data?.auth_required} />
+
         {config.error && !config.data ? (
           <div className="col-span-full">
             <ErrorState error={config.error} onRetry={config.reload} />
@@ -112,6 +178,13 @@ export function Settings() {
                 hint="When off, tool calls return deterministic demo data instead of failing."
                 right={<Pill ok={config.data.razorpay_configured} yesLabel="Configured" noLabel="Demo mode" />}
               />
+              {config.data.llm_configured !== undefined && (
+                <Row
+                  label="AI-written replies"
+                  hint={config.data.llm_model ? `Model: ${config.data.llm_model}` : "Set ANTHROPIC_API_KEY on the server to enable."}
+                  right={<Pill ok={config.data.llm_configured} yesLabel="On" noLabel="Templates" />}
+                />
+              )}
               <Row label="Key ID" right={<code className="inline-code">{config.data.razorpay_key_id_masked}</code>} />
             </Card>
 

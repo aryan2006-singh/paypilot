@@ -78,7 +78,7 @@ export function Agents() {
                 </div>
                 <div className="mt-auto pt-4">
                   <Link
-                    to={`/chat?q=${encodeURIComponent(agent.example)}`}
+                    to={`/app/chat?q=${encodeURIComponent(agent.example)}`}
                     className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-2)] px-3 py-2.5 text-left transition-colors hover:border-[var(--accent)]"
                   >
                     <span className="min-w-0">
