@@ -26,3 +26,8 @@ app/frontend_dist/
 # Leftover extracted zip from before this project was set up — not part of
 # the running app.
 paypilot_fixed_zip_src/
+
+# Runtime data (SQLite conversation store)
+data/*.db
+data/*.db-*
+.pytest_cache/

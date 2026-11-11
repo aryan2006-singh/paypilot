@@ -19,7 +19,7 @@ COPY . .
 # the build produced in the first stage.
 COPY --from=frontend-build /frontend/dist ./frontend/dist
 
-RUN python -m rag.build_index
+RUN python -m rag.build_index && mkdir -p /app/data
 
 # Render (and most PaaS hosts) inject the port to listen on via $PORT; the
 # default keeps `docker run -p 8000:8000` working locally. Shell form so the
@@ -30,4 +30,8 @@ EXPOSE 8000
 RUN useradd --create-home --uid 10001 appuser && chown -R appuser /app
 USER appuser
 
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+  CMD python -c "import os,urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get(\"PORT\",\"8000\")}/health', timeout=4)"
+
+# --proxy-headers so request logs and URLs reflect the real scheme behind Render.
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --proxy-headers --forwarded-allow-ips='*'"]
