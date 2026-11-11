@@ -1,147 +1,117 @@
-# PayPilot — Multi-Agent Payments Operations Assistant
+# PayPilot: multi-agent payments operations assistant
 
-A production-shaped AI agent system for payments support: intent routing, RAG over
-policy docs, and specialist LangGraph agents that call payment operations through
-an MCP tool server. Built to demonstrate the full stack a payments company actually
-runs in production — not just a notebook demo.
+PayPilot answers the questions a payments support or finance team asks all
+day: *why did this payment fail, where is this refund, does this settlement
+match our books, is this transaction risky.* A router sends each question to
+one of five specialist agents, which call real Razorpay APIs, ground
+themselves in policy documents, and (when an Anthropic key is set) have Claude
+write the answer, streamed live into the chat.
 
-## Why this project
-
-Razorpay's "AI Builders" track rewards proof of work over resumes. This project is
-scoped to show:
-- **Agent orchestration** — LangGraph state graph with a router + 4 specialists
-- **RAG** — TF-IDF retrieval over namespaced payments policy docs
-- **Tool use via MCP** — payment actions exposed as MCP tools, not hardcoded API calls
-- **Production API** — FastAPI with streaming responses, Pydantic v2 request/response
-  models, async throughout
-- **Deployability** — one-service Docker build (API + UI), health check, eval harness
+- **Five specialist agents**: payments, refunds, reconciliation, fraud, general
+- **Real data, never faked**: with Razorpay keys every answer comes from the live API, and a missing payment is reported as missing. Without keys the app runs in a clearly labelled demo mode.
+- **AI-written answers**: Claude (`claude-opus-5-5` by default) turns the agents' facts into a clear reply, token by token. No key? Deterministic template replies.
+- **Conversation memory**: follow-ups like *"and has it been refunded?"* reuse the payment from earlier in the chat. Conversations are stored in SQLite and can be listed, reopened and deleted.
+- **Production basics**: API-key auth, per-key/IP rate limits, request ids, JSON logs, consistent error bodies, health/readiness probes, OpenAPI docs at `/api/docs`.
+- **Tests and evals**: 49 pytest tests (API, security, tools, LLM writer, router) plus a router eval set.
 
 ## Architecture
 
 ```
-Client → FastAPI (/chat, streaming)
-           → LangGraph router (intent classification)
-               → Payments agent     ─┐
-               → Refunds agent       ├─ each calls RAG store (policy context)
-               → Reconciliation agent│  + MCP tool server (live actions)
-               → Fraud-flag agent   ─┘
+Browser (React SPA, served by the same service)
+   │  POST /chat/stream  (SSE: step → meta → token… → done)
+   ▼
+FastAPI  app/api ──► ChatOrchestrator  app/services/orchestrator.py
+                        │ 1. load conversation memory      (SQLite, app/services/store.py)
+                        │ 2. route intent + resolve ids     (app/agents/router.py)
+                        │ 3. specialist agent               (app/agents/specialists.py)
+                        │      ├─ policy passages (TF-IDF RAG, rag/)
+                        │      └─ payment tool              (app/agents/tools.py → Razorpay)
+                        │ 4. write the answer               (Claude, app/services/llm.py)
+                        └ 5. persist the exchange
 ```
 
-## Getting started
+The agents do the deterministic work (routing, tool calls, policy lookup), so
+the facts are always the same and auditable. Claude only writes the answer
+from those facts, and never sees anything it could act on. If the LLM is off,
+declines, or errors, the agent's own draft is streamed instead, so a chat
+never fails because of the LLM.
+
+The same tools are also exposed over **MCP** (`python -m mcp_server.tools`),
+so Claude Desktop or another agent can use them directly.
+
+```
+app/
+  main.py              app factory, lifespan, SPA mount
+  core/                config, logging, errors, security, middleware
+  api/routes/          chat, conversations, payments, system
+  agents/              router, specialists, tools
+  integrations/        Razorpay client, ledger + reconciliation
+  services/            orchestrator, LLM writer, SQLite store
+rag/                   policy docs + TF-IDF index
+mcp_server/tools.py    MCP server over the same tools
+evals/                 router eval set
+tests/                 pytest suite
+```
+
+## Running locally
 
 ```bash
-pip install -r requirements.txt
-python -m rag.build_index          # required once — populates rag/indexes/
-cp .env.example .env               # optional: add Razorpay test keys
-uvicorn app.main:app --reload
+python -m venv .venv && source .venv/bin/activate
+pip install -r requirements-dev.txt
+python -m rag.build_index            # once: builds rag/indexes/
+cp .env.example .env                 # optional: add keys
+uvicorn app.main:app --reload --port 8010
 ```
 
-Hit `POST /chat` with `{"message": "Where is my refund for payment pay_XXXX?"}`.
-
-The app runs fully without any API keys — every MCP tool falls back to
-deterministic mock data, and `/api/config` reports which mode you're in.
-
-To serve the UI from the same process, build the frontend too:
+Open http://localhost:8010/api/docs for the interactive API docs. For the UI,
+run `npm ci && npm run dev` in `frontend/` (it proxies to port 8010), or
+`npm run build` to have FastAPI serve it from `/`.
 
 ```bash
-cd frontend && npm ci && npm run build   # emits frontend/dist/
+pytest                               # 49 tests, no keys or network needed
+python -m evals.run_evals            # router eval, exits non-zero on any miss
 ```
 
-Without that build the API still boots; `/` just returns a short JSON notice
-instead of the SPA.
+## Configuration
 
-## Deploying
+Everything is optional; see `.env.example` for the full list.
 
-`render.yaml` defines a single Render web service built from the `Dockerfile`,
-which compiles the React frontend and serves it from the same FastAPI process —
-so there's no CORS wiring and no second deploy to keep in sync.
+| Variable | Effect |
+|---|---|
+| `PAYPILOT_API_KEYS` | Comma-separated API keys. Clients send `X-API-Key`. Unset = open API. |
+| `PAYPILOT_REQUIRE_AUTH` | `1` refuses to start without keys. Use in production. |
+| `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` | Real Razorpay data (test or live keys). Unset = demo mode. |
+| `ANTHROPIC_API_KEY` | Claude writes the answers. Unset = template answers. |
+| `LLM_MODEL` / `LLM_EFFORT` | Defaults `claude-opus-5-5` / `low`. |
+| `LEDGER_PATH` | JSON ledger export for reconciliation. |
+| `DATABASE_PATH` | SQLite file for conversations (default `data/paypilot.db`). |
+| `TRUST_PROXY_HEADERS` | `1` behind Render so rate limits see the real client IP. |
+| `ALLOWED_ORIGINS` | CORS origins, only when the UI is hosted elsewhere. |
 
-```
-Render → New → Blueprint → point at this repo
-```
+## API
 
-Docker runtime is deliberate: `frontend/dist` and `rag/indexes/` are gitignored
-build artifacts, so the image has to produce both. It fits the free tier
-(~80 MB resident). No environment variables are required to get a working
-deploy; `RAZORPAY_KEY_ID`/`RAZORPAY_KEY_SECRET` only switch it from mock data
-to Razorpay's test API.
+| Method & path | Purpose |
+|---|---|
+| `POST /chat` | One answer as JSON. Body `{message, session_id?}`. |
+| `POST /chat/stream` | Same, as server-sent events (`step`, `meta`, `token`, `done`, `error`). |
+| `GET /api/conversations` · `GET/DELETE /api/conversations/{id}` | Conversation history (per API key). |
+| `GET /api/payments` · `GET /api/settlements` | Recent real Razorpay records (live mode only). |
+| `GET /api/stats` · `GET /api/activity` | Dashboard numbers and recent activity. |
+| `GET /api/agents` · `GET /api/config` · `GET /api/info` | Agent catalogue, config, version/mode. |
+| `GET /api/auth/status` · `GET /api/auth/check` | Whether a key is needed / validate a key. |
+| `GET /health` · `GET /api/health` | Liveness / readiness (checks the database). |
 
-## What's stubbed vs real
+Errors always look like `{"detail": "...", "code": "...", "request_id": "..."}`.
 
-- The MCP tools in `mcp_server/tools.py` call Razorpay's **test-mode** API
-  (https://razorpay.com/docs/api/ — get free test keys from the dashboard).
-  Swap `RAZORPAY_KEY_ID`/`RAZORPAY_KEY_SECRET` in `.env` to go live in test mode.
-- The RAG corpus in `rag/docs/` is a placeholder — drop in your own Razorpay
-  policy/FAQ markdown files and re-run `python -m rag.build_index`.
-- Retrieval is TF-IDF (`rag/tfidf.py`), not embeddings. On a corpus of four
-  short policy docs it ranks the same passages a MiniLM embedding would, and it
-  keeps the service inside a 512 MB instance — the sentence-transformers stack
-  held ~490 MB resident on its own. Swap it back in if the corpus grows enough
-  that semantic matching starts to matter.
-- Fraud-flag agent uses a simple rule-based risk score as a starting point —
-  swap in a real model if you want to go further.
+## Deploying (Render)
 
-## Fixes applied to get this running
+`render.yaml` defines one Docker web service that builds the React frontend and
+serves it from the same FastAPI process. Set these in the Render dashboard:
 
-The scaffold as generated had a few bugs that would have broken it on first run:
+1. `PAYPILOT_API_KEYS` (and then `PAYPILOT_REQUIRE_AUTH=1`) so the API isn't open.
+2. `RAZORPAY_KEY_ID` / `RAZORPAY_KEY_SECRET` for real data.
+3. `ANTHROPIC_API_KEY` for AI-written answers.
 
-- `agents/graph.py` called MCP tools with `{"query": message}`, but the tools in
-  `mcp_server/tools.py` expect a specific `payment_id`/`settlement_id`. Added an
-  ID-extraction helper so agents pull `pay_XXXX` / `stl_XXXX` out of the message
-  before calling the tool.
-- `mcp_server/client.py` never actually opened the MCP connection —
-  `client.get_tools()` was awaited (it's synchronous) and the client was never
-  entered as an async context manager, so `server_name_to_tools` stayed empty.
-  Fixed to open the stdio connection once and reuse it.
-- `requirements.txt` pinned `langchain-core==0.3.10` and `mcp==1.0.0`, both of
-  which conflict with `langchain-mcp-adapters==0.0.5`'s own requirements
-  (`langchain-core>=0.3.36`, `mcp>=1.4.1,<1.5`) — `pip install` failed outright.
-  Bumped both.
-- `mcp_server/tools.py` didn't catch network-level errors from httpx, so any
-  connectivity hiccup calling Razorpay would 500 the whole `/chat` request
-  instead of degrading gracefully. Wrapped each call in a try/except.
-- Two directories were created with literal (unexpanded) brace syntax —
-  `rag/docs/{payments,refunds,reconciliation,general}` and a stray top-level
-  `{agents,mcp_server,rag,app}` — so only the `refunds` RAG namespace actually
-  had docs. Added placeholder `policy.md` files for the other three namespaces
-  and removed the stray directory.
-- Added the missing `.env.example` referenced in the setup instructions below.
-
-## Fixes applied to make it deployable
-
-A later pass audited the repo against an actual Render deploy and found it
-would not have booted:
-
-- `app/main.py` mounted `StaticFiles(directory=frontend/dist)` unconditionally.
-  `frontend/dist` is a gitignored build artifact and the Render build command
-  never produced it, so `StaticFiles` raised `RuntimeError` at import — the
-  service would have crash-looped on every deploy, not degraded. The mount is
-  now conditional, and the Docker build actually produces the directory.
-- `render.yaml` used `runtime: python`, which has no Node available to build
-  the frontend. Switched to the existing multi-stage `Dockerfile`, which builds
-  the SPA and the Python app in one image.
-- The dependency stack pulled `torch` transitively via `sentence-transformers`
-  and measured **488 MB resident** — Render's free *and* starter tiers are both
-  512 MB, so this would have been OOM-killed. On Linux, `pip install torch` also
-  drags in ~2.5 GB of CUDA wheels. Replaced FAISS + sentence-transformers with
-  the TF-IDF retriever in `rag/tfidf.py` (~80 MB resident, ~50 MB installed).
-- `mcp_server/client.py` spawned its stdio subprocess with a bare `"python"`,
-  which isn't guaranteed to be on PATH or to be the same interpreter as the
-  running venv. Now uses `sys.executable`.
-- The `Dockerfile` hardcoded `--port 8000`, ignoring the `$PORT` that Render
-  and most PaaS hosts inject. Now honours `$PORT` and runs as a non-root user.
-- `anthropic==0.36.0` and `ANTHROPIC_API_KEY` were declared but never imported
-  or read anywhere in the codebase. Removed both.
-
-Verified end-to-end: from a clean checkout with no build artifacts, installed
-only the pinned requirements, built the index, booted uvicorn, and confirmed
-all 5 routing intents (payments, refunds, reconciliation, fraud, general)
-return 200 with the correct agent, every `/api/*` endpoint and the SSE stream
-respond, and `evals/run_evals.py` passes 5/5.
-
-## Extending for the submission
-
-1. Deploy it (Render/Railway free tier works) so the link is live, not just a repo.
-2. Add 3-5 real eval cases in `evals/cases.jsonl` and show pass/fail in the README —
-   this is what "proof of work" evaluators actually look for over polish.
-3. Record a 60-90s Loom showing a real query hitting a real Razorpay test payment.
+The free plan has no persistent disk, so stored conversations reset when the
+service restarts. Attach a disk (paid plans) and point `DATABASE_PATH` at it to
+keep them.

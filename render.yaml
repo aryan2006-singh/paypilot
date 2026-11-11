@@ -2,10 +2,6 @@ services:
   # Single all-in-one service: the Docker build compiles the React frontend and
   # serves it from the same FastAPI process as the API, so there is no CORS
   # setup and no second deploy to keep in sync.
-  #
-  # Docker (not `runtime: python`) because the build needs Node to produce
-  # frontend/dist — that directory is a gitignored build artifact, and a
-  # Python-only build would leave it missing.
   - type: web
     name: paypilot
     runtime: docker
@@ -13,14 +9,28 @@ services:
     dockerfilePath: ./Dockerfile
     healthCheckPath: /health
     envVars:
-      # Only needed if you later deploy the frontend separately (e.g. Vercel)
-      # and point it at this API — comma-separated origins. Unset is correct
-      # for the all-in-one setup above.
-      - key: ALLOWED_ORIGINS
+      - key: ENVIRONMENT
+        value: production
+      # Render's edge is a proxy: trust X-Forwarded-For so rate limits are per client.
+      - key: TRUST_PROXY_HEADERS
+        value: "1"
+      # Comma-separated API keys. Unset = the API is open to anyone with the URL.
+      - key: PAYPILOT_API_KEYS
         sync: false
-      # Optional: without real Razorpay test keys every tool call returns
-      # deterministic mock data, so the app is fully functional unset.
+      # Claude writes the answers when this is set; template replies otherwise.
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      # Razorpay keys switch from demo data to real data.
       - key: RAZORPAY_KEY_ID
         sync: false
       - key: RAZORPAY_KEY_SECRET
         sync: false
+      # Only needed if the frontend is deployed on another origin.
+      - key: ALLOWED_ORIGINS
+        sync: false
+    # The free plan has no persistent disk, so conversations reset on each
+    # deploy/restart. On a paid plan, attach a disk and point DATABASE_PATH at it:
+    # disk:
+    #   name: paypilot-data
+    #   mountPath: /app/data
+    #   sizeGB: 1
