@@ -5,12 +5,10 @@ import {
   ArrowDown,
   ArrowRight,
   ArrowUpRight,
-  Bot,
   BookOpenText,
   Check,
   Copy,
   Gauge,
-  GitBranch,
   History,
   KeyRound,
   Menu,
@@ -26,9 +24,10 @@ import { useAsync } from "../hooks/useAsync";
 import { useAgentsState } from "../hooks/useAgents";
 import { useHealth } from "../hooks/useHealth";
 import { StatusDot, Wordmark } from "../components/Sidebar";
-import { AGENT_ICONS } from "../components/ChatWelcome";
 import { LiveDemo } from "../components/landing/LiveDemo";
 import { PaymentStack3D } from "../components/landing/PaymentStack3D";
+import { AgentStackScene } from "../components/landing/AgentStackScene";
+import { PhonePayScene } from "../components/landing/PhonePayScene";
 import type { ApiInfo, Stats } from "../types";
 
 /* ----------------------------------------------------------------------------
@@ -193,6 +192,7 @@ function Hero({ info }: { info: ApiInfo | null }) {
   // 3D scene plays through as you scroll.
   const { scrollYProgress } = useScroll({ target: ref, offset: ["start start", "end end"] });
   const wordY = useTransform(scrollYProgress, [0, 1], [0, reduce ? 0 : -60]);
+  const wordX = useTransform(scrollYProgress, [0, 1], ["0%", reduce ? "0%" : "-38%"]);
   const wordOpacity = useTransform(scrollYProgress, [0.2, 0.9], [1, reduce ? 1 : 0.18]);
   const copyOpacity = useTransform(scrollYProgress, [0, 0.35], [1, reduce ? 1 : 0]);
   const ctaY = useTransform(scrollYProgress, [0, 1], [0, reduce ? 0 : 30]);
@@ -220,8 +220,8 @@ function Hero({ info }: { info: ApiInfo | null }) {
             initial={{ opacity: 0, y: 40 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, ease: [0.2, 0.7, 0.2, 1] }}
-            style={{ y: wordY, opacity: wordOpacity }}
-            className="relative z-0 mt-10 select-none text-[clamp(64px,16.6vw,232px)] font-bold uppercase leading-[0.82] tracking-[-0.045em] max-md:mt-7"
+            style={{ x: wordX, y: wordY, opacity: wordOpacity }}
+            className="relative z-0 mt-10 select-none whitespace-nowrap text-[clamp(64px,16.6vw,232px)] font-bold uppercase leading-[0.82] tracking-[-0.045em] max-md:mt-7"
           >
             PayPilot<span className="text-[var(--accent)]">.</span>
             <span className="sr-only"> AI operations for payments teams</span>
@@ -430,97 +430,6 @@ function Features() {
         </div>
       </div>
     </section>
-  );
-}
-
-/* ----------------------------------------------------------------------------
- * Agents (from /api/agents), shown as an icon grid
- * ------------------------------------------------------------------------- */
-
-function Agents() {
-  const { agents, error, retry } = useAgentsState();
-  return (
-    <section id="agents" className="scroll-mt-20 border-t border-[var(--border)] py-32 max-md:py-20">
-      <div className={WRAP}>
-        <Reveal>
-          <SectionTitle
-            eyebrow="The team"
-            title={
-              <>
-                Five agents. <span className="text-[var(--accent)]">One job each.</span>
-              </>
-            }
-            body="These are the agents running on this server right now. Pick one to ask it a question."
-          />
-        </Reveal>
-        {error && !agents ? (
-          <div className="mt-12 text-[15px] text-[var(--text-muted)]">
-            Couldn't load the agents from the API.{" "}
-            <button type="button" onClick={retry} className="font-medium text-[var(--accent)] hover:underline">
-              Try again
-            </button>
-          </div>
-        ) : (
-          <div className="mt-16 grid grid-cols-3 gap-px bg-[var(--border)] max-lg:grid-cols-2 max-sm:grid-cols-1">
-            {(agents ?? Array.from({ length: 5 }, () => null)).map((agent, i) =>
-              agent ? (
-                <Reveal key={agent.id} delay={(i % 3) * 0.07} className="bg-[var(--bg)]">
-                  <AgentTile {...agent} icon={AGENT_ICONS[agent.id] ?? Bot} />
-                </Reveal>
-              ) : (
-                <div key={i} className="bg-[var(--bg)] p-8">
-                  <div className="skeleton h-[200px]" />
-                </div>
-              ),
-            )}
-            {agents && (
-              <Reveal delay={0.14} className="bg-[var(--bg)]">
-                <div className="flex h-full flex-col p-8 max-md:p-6">
-                  <div className="grid h-[72px] w-[72px] place-items-center rounded-full border-2 border-dashed border-[var(--border-strong)] text-[var(--accent)]">
-                    <GitBranch size={26} />
-                  </div>
-                  <h3 className="mt-8 text-[24px] font-bold">Plus a router</h3>
-                  <p className="mt-3 text-[15px] leading-relaxed text-[var(--text-dim)]">
-                    Classifies every question by intent and pulls out IDs like <code className="inline-code">pay_…</code> and{" "}
-                    <code className="inline-code">stl_…</code> before any agent runs.
-                  </p>
-                </div>
-              </Reveal>
-            )}
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function AgentTile({ label, color, description, example, tools, icon: Icon }: { label: string; color: string; description: string; example: string; tools?: string[]; icon: LucideIcon }) {
-  return (
-    <Link to={`/app/chat?q=${encodeURIComponent(example)}`} className="group flex h-full flex-col p-8 transition-colors hover:bg-[var(--surface)] max-md:p-6">
-      <div className="flex items-start justify-between">
-        <div
-          className="grid h-[72px] w-[72px] place-items-center rounded-full bg-[var(--surface-3)] transition-transform duration-300 group-hover:scale-110"
-          style={{ color }}
-        >
-          <Icon size={28} />
-        </div>
-        <ArrowUpRight size={22} className="text-[var(--text-muted)] transition-all group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-[var(--accent)]" />
-      </div>
-      <h3 className="mt-8 text-[24px] font-bold">{label}</h3>
-      <p className="mt-3 flex-1 text-[15px] leading-relaxed text-[var(--text-dim)]">{description}</p>
-      {tools && tools.length > 0 && (
-        <div className="mt-5 flex flex-wrap gap-1.5">
-          {tools.map((t) => (
-            <code key={t} className="inline-code">
-              {t}
-            </code>
-          ))}
-        </div>
-      )}
-      <div className="mt-6 border-t border-[var(--border)] pt-4 text-[13.5px] text-[var(--text-muted)] transition-colors group-hover:text-[var(--text)]">
-        “{example}”
-      </div>
-    </Link>
   );
 }
 
@@ -794,10 +703,11 @@ export function Landing() {
       <main>
         <Hero info={info.data} />
         <Marquee />
-        <TryLive />
         <Numbers info={info.data} stats={stats.error ? null : stats.data} agentCount={agents?.length ?? null} />
+        <AgentStackScene />
+        <PhonePayScene />
+        <TryLive />
         <Features />
-        <Agents />
         <HowItWorks />
         <Developers info={info.data} />
         <Faq info={info.data} />
