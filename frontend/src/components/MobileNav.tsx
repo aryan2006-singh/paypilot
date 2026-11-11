@@ -2,7 +2,7 @@ import { NavLink } from "react-router-dom";
 import { Moon, Sun } from "lucide-react";
 import { useTheme } from "../hooks/useTheme";
 import { useHealth } from "../hooks/useHealth";
-import { BrandMark, NAV_ITEMS, StatusDot, statusLabel } from "./Sidebar";
+import { BrandMark, Wordmark, NAV_ITEMS, StatusDot, statusLabel } from "./Sidebar";
 
 /** Compact top bar for phones and small tablets. */
 export function MobileTopBar() {
@@ -11,7 +11,7 @@ export function MobileTopBar() {
   return (
     <header className="sticky top-0 z-20 hidden items-center gap-2.5 border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--surface)_85%,transparent)] px-4 py-2.5 backdrop-blur-md max-md:flex">
       <BrandMark size={28} />
-      <div className="flex-1 text-[15px] font-semibold tracking-tight">PayPilot</div>
+      <Wordmark className="flex-1 text-[16px]" />
       <span className="flex items-center gap-1.5 text-[11.5px] text-[var(--text-muted)]" role="status" title={statusLabel(online)}>
         <StatusDot online={online} />
         {online === false ? "Offline" : online ? "Online" : ""}

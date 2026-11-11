@@ -107,16 +107,16 @@ export function LiveDemo() {
 
   return (
     <div className="relative">
-      <div aria-hidden className="pointer-events-none absolute -inset-6 rounded-[32px] bg-[radial-gradient(closest-side,color-mix(in_srgb,var(--accent)_22%,transparent),transparent)] blur-2xl" />
-      <div className="relative overflow-hidden rounded-2xl border border-[var(--border-strong)] bg-[var(--surface)] shadow-[0_30px_80px_-30px_rgba(40,30,120,0.35)]">
+      <div aria-hidden className="pointer-events-none absolute -inset-10 bg-[radial-gradient(closest-side,color-mix(in_srgb,var(--accent)_10%,transparent),transparent)] blur-2xl" />
+      <div className="relative overflow-hidden border border-[var(--border-strong)] bg-[var(--surface)] shadow-[0_30px_80px_-30px_rgba(0,0,0,0.8)]">
         <div className="flex items-center gap-2 border-b border-[var(--border)] bg-[var(--surface-2)] px-4 py-2.5">
           <span className="flex gap-1.5" aria-hidden>
-            <span className="h-2.5 w-2.5 rounded-full bg-[#ff5f57]" />
-            <span className="h-2.5 w-2.5 rounded-full bg-[#febc2e]" />
-            <span className="h-2.5 w-2.5 rounded-full bg-[#28c840]" />
+            <span className="h-2 w-2 bg-[var(--accent)]" />
+            <span className="h-2 w-2 bg-[var(--border-strong)]" />
+            <span className="h-2 w-2 bg-[var(--border-strong)]" />
           </span>
-          <span className="ml-2 text-[12px] font-medium text-[var(--text-muted)]">Try PayPilot live</span>
-          <span className="ml-auto rounded-full bg-[var(--accent-soft)] px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-[var(--accent-text)]">
+          <span className="font-display ml-2 text-[11.5px] font-bold uppercase tracking-[0.08em] text-[var(--text-muted)]">Try PayPilot live</span>
+          <span className="ml-auto bg-[var(--accent-soft)] px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-wide text-[var(--accent-text)]">
             Real API
           </span>
         </div>
@@ -150,7 +150,7 @@ export function LiveDemo() {
           ) : (
             <div className="space-y-3.5">
               <div className="flex justify-end">
-                <div className="max-w-[85%] rounded-2xl rounded-br-md bg-[var(--accent)] px-3.5 py-2 text-[13.5px] text-white">{state.question}</div>
+                <div className="max-w-[85%] rounded-2xl rounded-br-md bg-[var(--accent)] px-3.5 py-2 text-[13.5px] text-[var(--on-accent)]">{state.question}</div>
               </div>
 
               {state.steps.length > 0 && (
