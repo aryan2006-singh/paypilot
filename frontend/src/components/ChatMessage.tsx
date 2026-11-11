@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { FileText, Wrench, Copy, Check, User, AlertTriangle, RotateCw, ChevronRight, Braces, CircleCheck, CircleAlert, Loader2 } from "lucide-react";
 import type { AgentMeta, AgentStep, ChatResponse } from "../types";
 import { StatusChip } from "./Chips";
+import { Markdown } from "./Markdown";
 import { BrandMark } from "./Sidebar";
 
 export interface UserMessage {
@@ -201,8 +202,8 @@ export function ChatMessageView({ item, agentMeta, onRetry }: { item: ChatItem; 
           ))}
 
         {(data.reply || !streaming) && (
-          <div className="whitespace-pre-wrap break-words rounded-2xl rounded-tl-md border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-[14.5px] leading-relaxed shadow-[var(--shadow-sm)]">
-            {data.reply || (stopped ? <span className="text-[var(--text-muted)]">No reply yet.</span> : null)}
+          <div className="break-words rounded-2xl rounded-tl-md border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-[14.5px] leading-relaxed shadow-[var(--shadow-sm)]">
+            {data.reply ? <Markdown>{data.reply}</Markdown> : (stopped ? <span className="text-[var(--text-muted)]">No reply yet.</span> : null)}
             {streaming && (
               <span aria-hidden className="ml-0.5 inline-block h-[1em] w-[2px] translate-y-[2px] animate-pulse bg-[var(--text-muted)]" />
             )}

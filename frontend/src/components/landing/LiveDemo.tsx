@@ -5,6 +5,7 @@ import { api } from "../../api";
 import { useAgents, agentById } from "../../hooks/useAgents";
 import { describeError } from "../States";
 import { AgentChip, StatusChip } from "../Chips";
+import { Markdown } from "../Markdown";
 import { BrandMark } from "../Sidebar";
 import type { AgentStep, ToolResult } from "../../types";
 
@@ -181,10 +182,10 @@ export function LiveDemo() {
                       {state.tool && typeof state.tool.mock === "boolean" && <StatusChip kind={state.tool.mock ? "demo" : "live"} />}
                     </div>
                     {state.reply && (
-                      <p className="whitespace-pre-wrap text-[13.5px] leading-relaxed">
-                        {state.reply}
-                        {state.streaming && <span className="ml-0.5 inline-block h-3.5 w-1.5 animate-pulse rounded-sm bg-[var(--accent)] align-middle" />}
-                      </p>
+                      <div className="text-[13.5px] leading-relaxed">
+                        <Markdown>{state.reply}</Markdown>
+                        {state.streaming && <span className="inline-block h-3.5 w-1.5 animate-pulse rounded-sm bg-[var(--accent)] align-middle" />}
+                      </div>
                     )}
                     {state.error && <p className="text-[13px] text-[var(--critical)]">{state.error}</p>}
                   </div>

@@ -511,7 +511,7 @@ function Developers({ info }: { info: ApiInfo | null }) {
             ))}
           </ul>
           <a
-            href={`${origin}/docs`}
+            href={`${origin}/api/docs`}
             target="_blank"
             rel="noreferrer"
             className="mt-8 inline-flex items-center gap-1.5 text-[14px] font-semibold text-[var(--accent-text)] hover:underline"
@@ -634,7 +634,7 @@ function Footer({ info }: { info: ApiInfo | null }) {
           <Link to="/app" className="hover:text-[var(--text)]">Dashboard</Link>
           <Link to="/app/chat" className="hover:text-[var(--text)]">Chat</Link>
           <Link to="/app/agents" className="hover:text-[var(--text)]">Agents</Link>
-          <a href={`${origin}/docs`} target="_blank" rel="noreferrer" className="hover:text-[var(--text)]">API reference</a>
+          <a href={`${origin}/api/docs`} target="_blank" rel="noreferrer" className="hover:text-[var(--text)]">API reference</a>
           <a href="https://github.com/aryan2006-singh/paypilot" target="_blank" rel="noreferrer" className="hover:text-[var(--text)]">GitHub</a>
         </nav>
       </div>
