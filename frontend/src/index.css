@@ -176,3 +176,8 @@ kbd.kbd {
 .markdown ol { list-style: decimal; padding-left: 1.25em; }
 .markdown li + li { margin-top: 0.2em; }
 .markdown strong { font-weight: 600; }
+
+@keyframes pp-float {
+  0%, 100% { translate: 0 0; }
+  50% { translate: 0 -14px; }
+}

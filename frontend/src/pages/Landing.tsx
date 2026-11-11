@@ -28,6 +28,7 @@ import { useHealth } from "../hooks/useHealth";
 import { StatusDot, Wordmark } from "../components/Sidebar";
 import { AGENT_ICONS } from "../components/ChatWelcome";
 import { LiveDemo } from "../components/landing/LiveDemo";
+import { PaymentStack3D } from "../components/landing/PaymentStack3D";
 import type { ApiInfo, Stats } from "../types";
 
 /* ----------------------------------------------------------------------------
@@ -185,76 +186,112 @@ function StatusBadge({ info }: { info: ApiInfo | null }) {
   );
 }
 
-/** A circular, slowly spinning stamp that sits on the wordmark. */
-function SpinBadge({ agentCount }: { agentCount: number | null }) {
-  const text = `${agentCount ?? 5} specialist agents · one router · live answers · `;
-  return (
-    <div className="relative grid h-[168px] w-[168px] place-items-center max-lg:h-[120px] max-lg:w-[120px] max-md:h-[80px] max-md:w-[80px]">
-      <svg viewBox="0 0 200 200" className="absolute inset-0 h-full w-full animate-[spin_18s_linear_infinite]" aria-hidden>
-        <defs>
-          <path id="pp-circle" d="M100,100 m-78,0 a78,78 0 1,1 156,0 a78,78 0 1,1 -156,0" />
-        </defs>
-        <circle cx="100" cy="100" r="99" fill="var(--accent)" />
-        <text fontFamily="Space Grotesk, sans-serif" fontWeight="700" fontSize="15.5" letterSpacing="1.5" fill="#141414">
-          <textPath href="#pp-circle">{text.toUpperCase()}</textPath>
-        </text>
-      </svg>
-      <div className="relative grid h-[44%] w-[44%] place-items-center rounded-full bg-[#141414] text-[var(--accent)]">
-        <Sparkles className="h-[46%] w-[46%]" aria-hidden />
-      </div>
-    </div>
-  );
-}
-
-function Hero({ info, agentCount }: { info: ApiInfo | null; agentCount: number | null }) {
+function Hero({ info }: { info: ApiInfo | null }) {
   const ref = useRef<HTMLElement>(null);
   const reduce = useReducedMotion();
-  const { scrollYProgress } = useScroll({ target: ref, offset: ["start start", "end start"] });
-  const wordY = useTransform(scrollYProgress, [0, 1], [0, reduce ? 0 : -120]);
-  const badgeRotate = useTransform(scrollYProgress, [0, 1], [0, reduce ? 0 : 90]);
+  // The hero is taller than the screen; its content stays pinned while the
+  // 3D scene plays through as you scroll.
+  const { scrollYProgress } = useScroll({ target: ref, offset: ["start start", "end end"] });
+  const wordY = useTransform(scrollYProgress, [0, 1], [0, reduce ? 0 : -60]);
+  const wordOpacity = useTransform(scrollYProgress, [0.2, 0.9], [1, reduce ? 1 : 0.18]);
+  const copyOpacity = useTransform(scrollYProgress, [0, 0.35], [1, reduce ? 1 : 0]);
+  const ctaY = useTransform(scrollYProgress, [0, 1], [0, reduce ? 0 : 30]);
 
   return (
-    <section ref={ref} className="relative overflow-hidden">
-      <div aria-hidden className="grid-lines pointer-events-none absolute inset-0 -z-10 [mask-image:radial-gradient(80%_70%_at_50%_10%,black,transparent)]" />
-      <div className={`${WRAP} pt-14 max-md:pt-8`}>
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }} className="flex flex-wrap items-start justify-between gap-6">
-          <p className="max-w-[560px] text-[20px] leading-snug text-[var(--text-dim)] max-md:text-[16.5px]">
-            Ask any payment question in plain English. PayPilot routes it to the right agent, checks live data and your
-            policies, and answers with the evidence attached.
-          </p>
-          <StatusBadge info={info} />
-        </motion.div>
+    <section ref={ref} className="relative h-[220vh] max-md:h-[170vh]">
+      <div className="sticky top-[76px] h-[calc(100dvh-76px)] overflow-hidden max-md:top-16 max-md:h-[calc(100dvh-64px)]">
+        <div aria-hidden className="grid-lines pointer-events-none absolute inset-0 -z-10 [mask-image:radial-gradient(80%_70%_at_50%_10%,black,transparent)]" />
+        <div className={`${WRAP} relative flex h-full flex-col pt-12 pb-10 max-md:pt-7 max-md:pb-7`}>
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            style={{ opacity: copyOpacity }}
+            className="flex flex-wrap items-start justify-between gap-5"
+          >
+            <p className="max-w-[560px] text-[20px] leading-snug text-[var(--text-dim)] max-md:text-[16px]">
+              Ask any payment question in plain English. PayPilot routes it to the right agent, checks live data and your
+              policies, and answers with the evidence attached.
+            </p>
+            <StatusBadge info={info} />
+          </motion.div>
 
-        <motion.div style={{ y: wordY }} className="relative mt-10 max-md:mt-8">
           <motion.h1
             initial={{ opacity: 0, y: 40 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, ease: [0.2, 0.7, 0.2, 1] }}
-            className="select-none text-[clamp(64px,16.6vw,232px)] font-bold uppercase leading-[0.82] tracking-[-0.045em]"
+            style={{ y: wordY, opacity: wordOpacity }}
+            className="relative z-0 mt-10 select-none text-[clamp(64px,16.6vw,232px)] font-bold uppercase leading-[0.82] tracking-[-0.045em] max-md:mt-7"
           >
             PayPilot<span className="text-[var(--accent)]">.</span>
             <span className="sr-only"> AI operations for payments teams</span>
           </motion.h1>
-          <motion.div
-            initial={{ scale: 0.6, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ duration: 0.7, delay: 0.35, ease: [0.2, 0.7, 0.2, 1] }}
-            style={{ rotate: badgeRotate }}
-            className="absolute -top-[9%] right-[2%] max-md:-top-[105%] max-md:right-0"
-          >
-            <SpinBadge agentCount={agentCount} />
-          </motion.div>
-        </motion.div>
-      </div>
 
-      <div className={`${WRAP} grid grid-cols-[1fr_1.1fr] items-end gap-16 pb-24 pt-16 max-lg:grid-cols-1 max-lg:gap-12 max-md:pb-16 max-md:pt-10`}>
-        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, delay: 0.25 }}>
-          <h2 className="text-[44px] font-bold leading-[1.02] tracking-[-0.02em] max-md:text-[32px]">
-            Payment ops,
-            <br />
-            <span className="text-[var(--accent)]">on autopilot.</span>
-          </h2>
-          <ul className="mt-7 space-y-3 text-[15px] text-[var(--text-dim)]">
+          {/* 3D scene: overlaps the wordmark on large screens, centred below it on phones. */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.85 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.9, delay: 0.3, ease: [0.2, 0.7, 0.2, 1] }}
+            className="absolute z-10 lg:right-[10%] lg:top-[44%] max-lg:left-1/2 max-lg:top-[50%] max-lg:-translate-x-1/2"
+          >
+            <div className="origin-top max-lg:scale-[0.8] max-md:scale-[0.62]">
+              <PaymentStack3D progress={scrollYProgress} />
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.25 }}
+            style={{ y: ctaY }}
+            className="relative z-20 mt-auto flex items-end justify-between gap-6"
+          >
+            <div>
+              <h2 className="text-[44px] font-bold leading-[1.02] tracking-[-0.02em] max-md:text-[28px]">
+                Payment ops,
+                <br />
+                <span className="text-[var(--accent)]">on autopilot.</span>
+              </h2>
+              <div className="mt-7 flex flex-wrap gap-3 max-md:mt-5">
+                <PrimaryLink to="/app/chat">
+                  Start a conversation <ArrowRight size={16} />
+                </PrimaryLink>
+                <SecondaryLink to="/app">View dashboard</SecondaryLink>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => scrollToSection("try")}
+              className="font-display inline-flex shrink-0 items-center gap-2 text-[13px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)] hover:text-[var(--text)] max-lg:hidden"
+            >
+              <ArrowDown size={15} className="animate-bounce" /> Scroll down
+            </button>
+          </motion.div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* ----------------------------------------------------------------------------
+ * Try it live
+ * ------------------------------------------------------------------------- */
+
+function TryLive() {
+  return (
+    <section id="try" className="scroll-mt-20 border-t border-[var(--border)] py-28 max-md:py-16">
+      <div className={`${WRAP} grid grid-cols-[1fr_1.1fr] items-center gap-16 max-lg:grid-cols-1 max-lg:gap-10`}>
+        <Reveal>
+          <SectionTitle
+            eyebrow="Try it live"
+            title={
+              <>
+                Ask it <span className="text-[var(--accent)]">anything.</span>
+              </>
+            }
+            body="Your question goes to the same agents the console uses, and the answer streams back with the data behind it."
+          />
+          <ul className="mt-8 space-y-3 text-[15px] text-[var(--text-dim)]">
             {["Payments, refunds, fraud and reconciliation", "Answers stream in real time", "Every answer shows its sources"].map((t) => (
               <li key={t} className="flex items-center gap-3">
                 <span className="grid h-5 w-5 shrink-0 place-items-center bg-[var(--accent)] text-[var(--on-accent)]">
@@ -264,24 +301,10 @@ function Hero({ info, agentCount }: { info: ApiInfo | null; agentCount: number |
               </li>
             ))}
           </ul>
-          <div className="mt-9 flex flex-wrap gap-3">
-            <PrimaryLink to="/app/chat">
-              Start a conversation <ArrowRight size={16} />
-            </PrimaryLink>
-            <SecondaryLink to="/app">View dashboard</SecondaryLink>
-          </div>
-          <button
-            type="button"
-            onClick={() => scrollToSection("numbers")}
-            className="font-display mt-14 inline-flex items-center gap-2 text-[13px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)] hover:text-[var(--text)] max-lg:hidden"
-          >
-            <ArrowDown size={15} className="animate-bounce" /> Scroll down
-          </button>
-        </motion.div>
-
-        <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, delay: 0.35 }}>
+        </Reveal>
+        <Reveal delay={0.1}>
           <LiveDemo />
-        </motion.div>
+        </Reveal>
       </div>
     </section>
   );
@@ -756,7 +779,7 @@ export function Landing() {
   }, []);
 
   return (
-    <div className="dark min-h-dvh bg-[var(--bg)] text-[var(--text)] [color-scheme:dark]">
+    <div className="dark min-h-dvh overflow-x-clip bg-[var(--bg)] text-[var(--text)] [color-scheme:dark]">
       <a
         href="#top"
         onClick={(e) => {
@@ -769,8 +792,9 @@ export function Landing() {
       </a>
       <Nav />
       <main>
-        <Hero info={info.data} agentCount={agents?.length ?? null} />
+        <Hero info={info.data} />
         <Marquee />
+        <TryLive />
         <Numbers info={info.data} stats={stats.error ? null : stats.data} agentCount={agents?.length ?? null} />
         <Features />
         <Agents />
