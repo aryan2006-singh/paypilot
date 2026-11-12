@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { motion, useMotionValueEvent, useReducedMotion, useScroll, useSpring, useTransform, type MotionValue } from "framer-motion";
+import { motion, useMotionValueEvent, useScroll, useSpring, useTransform, type MotionValue } from "framer-motion";
 import { ArrowUpRight, Bot, type LucideIcon } from "lucide-react";
 import { useAgentsState } from "../../hooks/useAgents";
 import { AGENT_ICONS } from "../ChatWelcome";
@@ -89,7 +89,9 @@ function AgentCard({
 
 export function AgentStackScene() {
   const ref = useRef<HTMLElement>(null);
-  const reduce = !!useReducedMotion();
+  // Scroll-linked motion only moves when the visitor scrolls, so it stays on
+  // even with "reduce motion"; looping CSS animations are still turned off.
+  const reduce = false as boolean;
   const large = useIsLarge();
   const { agents, error, retry } = useAgentsState();
   const { scrollYProgress } = useScroll({ target: ref, offset: ["start start", "end end"] });

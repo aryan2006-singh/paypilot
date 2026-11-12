@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { AnimatePresence, motion, useMotionValueEvent, useReducedMotion, useScroll, useSpring, useTransform, type MotionValue } from "framer-motion";
+import { AnimatePresence, motion, useMotionValueEvent, useScroll, useSpring, useTransform, type MotionValue } from "framer-motion";
 import { Check, CreditCard, IndianRupee, Wifi } from "lucide-react";
 
 /*
@@ -81,7 +81,9 @@ function PhoneScreen({ stage }: { stage: number }) {
 
 export function PhonePayScene() {
   const ref = useRef<HTMLElement>(null);
-  const reduce = !!useReducedMotion();
+  // Scroll-linked motion only moves when the visitor scrolls, so it stays on
+  // even with "reduce motion"; looping CSS animations are still turned off.
+  const reduce = false as boolean;
   const { scrollYProgress } = useScroll({ target: ref, offset: ["start start", "end end"] });
   const p = useSpring(scrollYProgress, { stiffness: 100, damping: 24, mass: 0.35 });
   const r = (a: number, b: number) => (reduce ? [b, b] : [a, b]);

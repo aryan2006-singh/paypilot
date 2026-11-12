@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { motion, useScroll, useTransform, useReducedMotion } from "framer-motion";
+import { motion, useScroll, useTransform } from "framer-motion";
 import {
   ArrowDown,
   ArrowRight,
@@ -187,7 +187,9 @@ function StatusBadge({ info }: { info: ApiInfo | null }) {
 
 function Hero({ info }: { info: ApiInfo | null }) {
   const ref = useRef<HTMLElement>(null);
-  const reduce = useReducedMotion();
+  // Scroll-linked motion only moves when the visitor scrolls, so it stays on
+  // even with "reduce motion"; looping CSS animations are still turned off.
+  const reduce = false as boolean;
   // The hero is taller than the screen; its content stays pinned while the
   // 3D scene plays through as you scroll.
   const { scrollYProgress } = useScroll({ target: ref, offset: ["start start", "end end"] });

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { motion, useMotionValue, useReducedMotion, useSpring, useTransform, type MotionValue } from "framer-motion";
+import { motion, useMotionValue, useSpring, useTransform, type MotionValue } from "framer-motion";
 import { Check, IndianRupee, Wifi } from "lucide-react";
 
 /*
@@ -129,7 +129,9 @@ function Coin({ size, x, y, z, lift, spin, face, delay }: { size: number; x: num
 
 /** `progress` runs 0 to 1 as the hero scrolls; it drives the whole pose. */
 export function PaymentStack3D({ progress }: { progress: MotionValue<number> }) {
-  const reduce = useReducedMotion();
+  // Scroll-linked motion only moves when the visitor scrolls, so it stays on
+  // even with "reduce motion"; looping CSS animations are still turned off.
+  const reduce = false as boolean;
   const p = useSpring(progress, { stiffness: 80, damping: 20, mass: 0.4 });
   const k = (a: number, b: number) => (reduce ? [(a + b) / 2, (a + b) / 2] : [a, b]);
 
