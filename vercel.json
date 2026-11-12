@@ -1,0 +1,17 @@
+{
+  "installCommand": "cd frontend && npm install",
+  "buildCommand": "cd frontend && npm run build",
+  "outputDirectory": "frontend/dist",
+  "rewrites": [
+    { "source": "/chat", "destination": "/api/index" },
+    { "source": "/chat/stream", "destination": "/api/index" },
+    { "source": "/health", "destination": "/api/index" },
+    { "source": "/api/:path*", "destination": "/api/index" }
+  ],
+  "functions": {
+    "api/index.py": {
+      "includeFiles": "{app,rag}/**",
+      "maxDuration": 60
+    }
+  }
+}

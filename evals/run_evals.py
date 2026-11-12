@@ -1,40 +1,47 @@
-"""Minimal eval harness: measures router intent accuracy against evals/cases.jsonl.
+"""Router eval: intent accuracy against evals/cases.jsonl.
 
-Run: python -m evals.run_evals
+Run: python -m evals.run_evals   (exits non-zero below 100%, so CI can gate on it)
 
-This is intentionally small — the point for a submission like this is showing
-you *measure* your agent rather than eyeballing it. Extend with Ragas or
-promptfoo for retrieval-quality and answer-quality evals as a next step.
+Cases may carry "history" (earlier user/assistant turns) and "expected_entity"
+to check that follow-ups pick up ids from the conversation.
 """
 from __future__ import annotations
 
-import asyncio
 import json
+import sys
 from pathlib import Path
 
-from agents.graph import route_intent, PayPilotState
+from app.agents.router import route
+from app.services.orchestrator import conversation_state
+from app.services.store import StoredTurn
 
 CASES_PATH = Path(__file__).parent / "cases.jsonl"
 
 
-async def main():
-    cases = [json.loads(line) for line in CASES_PATH.read_text().splitlines() if line.strip()]
-    correct = 0
+def load_cases() -> list[dict]:
+    return [json.loads(line) for line in CASES_PATH.read_text().splitlines() if line.strip()]
 
+
+def evaluate(case: dict) -> tuple[bool, str]:
+    history = [StoredTurn(t["role"], t["content"], t.get("intent"), t.get("entity_id"))
+               for t in case.get("history", [])]
+    decision = route(case["message"], conversation_state(history))
+    ok = decision.intent == case["expected_agent"]
+    if "expected_entity" in case:
+        ok = ok and decision.entity_id == case["expected_entity"]
+    return ok, f"intent={decision.intent} entity={decision.entity_id}"
+
+
+def main() -> int:
+    cases = load_cases()
+    passed = 0
     for case in cases:
-        state: PayPilotState = {
-            "message": case["message"],
-            "session_id": "eval",
-            "history": [],
-        }
-        result = await route_intent(state)
-        passed = result["intent"] == case["expected_agent"]
-        correct += passed
-        status = "PASS" if passed else "FAIL"
-        print(f"[{status}] '{case['message']}' -> got={result['intent']} expected={case['expected_agent']}")
-
-    print(f"\n{correct}/{len(cases)} passed ({100 * correct / len(cases):.0f}%)")
+        ok, got = evaluate(case)
+        passed += ok
+        print(f"[{'PASS' if ok else 'FAIL'}] {case['message']!r} -> {got} (expected {case['expected_agent']})")
+    print(f"\n{passed}/{len(cases)} passed ({100 * passed / len(cases):.0f}%)")
+    return 0 if passed == len(cases) else 1
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    sys.exit(main())

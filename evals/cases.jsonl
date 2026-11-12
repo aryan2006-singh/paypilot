@@ -3,3 +3,13 @@
 {"message": "This transaction looks suspicious, can you check it?", "expected_agent": "fraud"}
 {"message": "Does settlement stl_44 match our ledger?", "expected_agent": "reconciliation"}
 {"message": "What are your business hours?", "expected_agent": "general"}
+{"message": "Is pay_Q1w2E3r4 captured yet?", "expected_agent": "payments", "expected_entity": "pay_Q1w2E3r4"}
+{"message": "Customer says they never got their money back for pay_Zx9", "expected_agent": "refunds", "expected_entity": "pay_Zx9"}
+{"message": "Flag pay_77Hk as possible fraud", "expected_agent": "fraud", "expected_entity": "pay_77Hk"}
+{"message": "UTR on setl_9KQ doesn't match our books", "expected_agent": "reconciliation", "expected_entity": "setl_9KQ"}
+{"message": "stl_ABC1", "expected_agent": "reconciliation", "expected_entity": "stl_ABC1"}
+{"message": "pay_ABC1", "expected_agent": "payments", "expected_entity": "pay_ABC1"}
+{"message": "How do I get my GST invoice?", "expected_agent": "general"}
+{"message": "and has it been refunded?", "expected_agent": "refunds", "expected_entity": "pay_Old1", "history": [{"role": "user", "content": "Why did pay_Old1 fail?"}, {"role": "assistant", "content": "It failed.", "intent": "payments", "entity_id": "pay_Old1"}]}
+{"message": "is it risky?", "expected_agent": "fraud", "expected_entity": "pay_Old1", "history": [{"role": "user", "content": "status of pay_Old1"}, {"role": "assistant", "content": "Captured.", "intent": "payments", "entity_id": "pay_Old1"}]}
+{"message": "why?", "expected_agent": "reconciliation", "expected_entity": "stl_9", "history": [{"role": "user", "content": "check settlement stl_9"}, {"role": "assistant", "content": "Mismatch.", "intent": "reconciliation", "entity_id": "stl_9"}]}

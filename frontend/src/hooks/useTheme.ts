@@ -1,24 +1,65 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 
+export type ThemePref = "light" | "dark" | "system";
 type Theme = "dark" | "light";
 
-function getInitialTheme(): Theme {
-  const saved = localStorage.getItem("paypilot-theme");
-  if (saved === "dark" || saved === "light") return saved;
-  return matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+const KEY = "paypilot-theme";
+const listeners = new Set<() => void>();
+const media = typeof matchMedia === "function" ? matchMedia("(prefers-color-scheme: dark)") : null;
+
+function readPref(): ThemePref {
+  try {
+    const saved = localStorage.getItem(KEY);
+    if (saved === "dark" || saved === "light") return saved;
+  } catch {
+    /* storage blocked: fall back to system */
+  }
+  return "system";
 }
 
+let pref: ThemePref = readPref();
+
+function resolve(p: ThemePref): Theme {
+  if (p === "system") return media?.matches ? "dark" : "light";
+  return p;
+}
+
+function apply() {
+  document.documentElement.classList.toggle("dark", resolve(pref) === "dark");
+}
+
+media?.addEventListener("change", () => {
+  if (pref === "system") {
+    apply();
+    listeners.forEach((l) => l());
+  }
+});
+
+function setPref(next: ThemePref) {
+  pref = next;
+  try {
+    if (next === "system") localStorage.removeItem(KEY);
+    else localStorage.setItem(KEY, next);
+  } catch {
+    /* ignore */
+  }
+  apply();
+  listeners.forEach((l) => l());
+}
+
+function subscribe(cb: () => void) {
+  listeners.add(cb);
+  return () => listeners.delete(cb);
+}
+
+/** Shared theme state: every caller sees the same value and updates together. */
 export function useTheme() {
-  const [theme, setTheme] = useState<Theme>(getInitialTheme);
+  const current = useSyncExternalStore(subscribe, () => pref);
+  const theme = resolve(current);
 
-  useEffect(() => {
-    document.documentElement.classList.toggle("dark", theme === "dark");
-    localStorage.setItem("paypilot-theme", theme);
-  }, [theme]);
+  useEffect(apply, []);
 
-  const toggle = useCallback(() => {
-    setTheme((t) => (t === "dark" ? "light" : "dark"));
-  }, []);
+  const toggle = useCallback(() => setPref(resolve(pref) === "dark" ? "light" : "dark"), []);
 
-  return { theme, toggle };
+  return { theme, pref: current, setPref, toggle };
 }
