@@ -1,23 +1,20 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, useScroll, useTransform } from "framer-motion";
 import {
+  ArrowDown,
   ArrowRight,
-  Bot,
+  ArrowUpRight,
   BookOpenText,
   Check,
-  ChevronDown,
   Copy,
   Gauge,
-  GitBranch,
   History,
   KeyRound,
   Menu,
-  Moon,
-  Radio,
+  Plus,
   ShieldCheck,
   Sparkles,
-  Sun,
   Workflow,
   X,
   type LucideIcon,
@@ -26,14 +23,15 @@ import { api } from "../api";
 import { useAsync } from "../hooks/useAsync";
 import { useAgentsState } from "../hooks/useAgents";
 import { useHealth } from "../hooks/useHealth";
-import { useTheme } from "../hooks/useTheme";
-import { BrandMark, StatusDot } from "../components/Sidebar";
-import { AGENT_ICONS } from "../components/ChatWelcome";
+import { StatusDot, Wordmark } from "../components/Sidebar";
 import { LiveDemo } from "../components/landing/LiveDemo";
+import { PaymentStack3D } from "../components/landing/PaymentStack3D";
+import { AgentStackScene } from "../components/landing/AgentStackScene";
+import { PhonePayScene } from "../components/landing/PhonePayScene";
 import type { ApiInfo, Stats } from "../types";
 
 /* ----------------------------------------------------------------------------
- * Small building blocks
+ * Building blocks
  * ------------------------------------------------------------------------- */
 
 const SECTIONS = [
@@ -44,21 +42,28 @@ const SECTIONS = [
   { id: "faq", label: "FAQ" },
 ];
 
+const WRAP = "mx-auto w-full max-w-[1280px] px-8 max-md:px-4";
+
 // Hash routing owns the URL fragment, so in-page links scroll instead of navigating.
 function scrollToSection(id: string) {
   document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function Eyebrow({ children }: { children: React.ReactNode }) {
-  return <div className="text-[12px] font-semibold uppercase tracking-[0.14em] text-[var(--accent-text)]">{children}</div>;
+  return (
+    <div className="font-display flex items-center gap-2 text-[12px] font-bold uppercase tracking-[0.14em] text-[var(--accent)]">
+      <span aria-hidden className="h-2 w-2 bg-[var(--accent)]" />
+      {children}
+    </div>
+  );
 }
 
-function SectionHeading({ eyebrow, title, body }: { eyebrow: string; title: string; body?: string }) {
+function SectionTitle({ eyebrow, title, body, className = "" }: { eyebrow: string; title: React.ReactNode; body?: string; className?: string }) {
   return (
-    <div className="mx-auto max-w-2xl text-center">
+    <div className={className}>
       <Eyebrow>{eyebrow}</Eyebrow>
-      <h2 className="mt-3 text-[34px] font-semibold leading-[1.15] tracking-tight max-md:text-[27px]">{title}</h2>
-      {body && <p className="mt-4 text-[16px] leading-relaxed text-[var(--text-dim)] max-md:text-[15px]">{body}</p>}
+      <h2 className="mt-5 max-w-[900px] text-[56px] font-bold leading-[1.02] tracking-[-0.025em] max-lg:text-[44px] max-md:text-[34px]">{title}</h2>
+      {body && <p className="mt-5 max-w-[620px] text-[17px] leading-relaxed text-[var(--text-dim)] max-md:text-[15.5px]">{body}</p>}
     </div>
   );
 }
@@ -66,10 +71,10 @@ function SectionHeading({ eyebrow, title, body }: { eyebrow: string; title: stri
 function Reveal({ children, delay = 0, className = "" }: { children: React.ReactNode; delay?: number; className?: string }) {
   return (
     <motion.div
-      initial={{ opacity: 0, y: 14 }}
+      initial={{ opacity: 0, y: 24 }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-60px" }}
-      transition={{ duration: 0.45, delay, ease: "easeOut" }}
+      viewport={{ once: true, margin: "-80px" }}
+      transition={{ duration: 0.6, delay, ease: [0.2, 0.7, 0.2, 1] }}
       className={className}
     >
       {children}
@@ -77,12 +82,11 @@ function Reveal({ children, delay = 0, className = "" }: { children: React.React
   );
 }
 
-function PrimaryLink({ to, children }: { to: string; children: React.ReactNode }) {
+const BTN = "font-display inline-flex h-12 items-center gap-2.5 px-6 text-[13.5px] font-bold uppercase tracking-[0.06em] transition-all";
+
+function PrimaryLink({ to, children, className = "" }: { to: string; children: React.ReactNode; className?: string }) {
   return (
-    <Link
-      to={to}
-      className="brand-gradient inline-flex h-11 items-center gap-2 rounded-xl px-5 text-[14.5px] font-semibold text-white shadow-[0_10px_30px_-10px_var(--accent)] transition-transform hover:-translate-y-px"
-    >
+    <Link to={to} className={`${BTN} bg-[var(--accent)] text-[var(--on-accent)] hover:bg-[var(--accent-2)] hover:shadow-[0_0_0_4px_color-mix(in_srgb,var(--accent)_25%,transparent)] ${className}`}>
       {children}
     </Link>
   );
@@ -90,10 +94,7 @@ function PrimaryLink({ to, children }: { to: string; children: React.ReactNode }
 
 function SecondaryLink({ to, children }: { to: string; children: React.ReactNode }) {
   return (
-    <Link
-      to={to}
-      className="inline-flex h-11 items-center gap-2 rounded-xl border border-[var(--border-strong)] bg-[var(--surface)] px-5 text-[14.5px] font-semibold transition-colors hover:border-[var(--accent)]"
-    >
+    <Link to={to} className={`${BTN} border border-[var(--border-strong)] text-[var(--text)] hover:border-[var(--text)]`}>
       {children}
     </Link>
   );
@@ -104,89 +105,61 @@ function SecondaryLink({ to, children }: { to: string; children: React.ReactNode
  * ------------------------------------------------------------------------- */
 
 function Nav() {
-  const { theme, toggle } = useTheme();
   const [open, setOpen] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
-
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 8);
-    onScroll();
-    window.addEventListener("scroll", onScroll, { passive: true });
-    return () => window.removeEventListener("scroll", onScroll);
-  }, []);
-
   const go = (id: string) => {
     setOpen(false);
     scrollToSection(id);
   };
 
   return (
-    <header
-      className={`sticky top-0 z-40 transition-colors ${
-        scrolled || open ? "border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--bg)_82%,transparent)] backdrop-blur-lg" : "border-b border-transparent"
-      }`}
-    >
-      <div className="mx-auto flex h-16 max-w-[1180px] items-center gap-6 px-6 max-md:px-4">
-        <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} className="flex items-center gap-2.5" aria-label="PayPilot home">
-          <BrandMark size={30} />
-          <span className="text-[16px] font-semibold tracking-tight">PayPilot</span>
+    <header className="sticky top-0 z-40 border-b border-[var(--border)] bg-[color-mix(in_srgb,var(--bg)_86%,transparent)] backdrop-blur-lg">
+      <div className={`${WRAP} flex h-[76px] items-center gap-8 max-md:h-16`}>
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          aria-label={open ? "Close menu" : "Open menu"}
+          aria-expanded={open}
+          className="grid h-10 w-10 place-items-center text-[var(--text)] lg:hidden"
+        >
+          {open ? <X size={22} /> : <Menu size={22} />}
+        </button>
+        <button type="button" onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} aria-label="PayPilot home">
+          <Wordmark className="text-[24px] max-md:text-[20px]" />
         </button>
 
-        <nav aria-label="Sections" className="flex items-center gap-1 max-md:hidden">
+        <nav aria-label="Sections" className="flex items-center gap-1 max-lg:hidden">
           {SECTIONS.map((s) => (
             <button
               key={s.id}
               type="button"
               onClick={() => go(s.id)}
-              className="rounded-lg px-3 py-2 text-[13.5px] font-medium text-[var(--text-dim)] transition-colors hover:text-[var(--text)]"
+              className="font-display px-3 py-2 text-[12.5px] font-bold uppercase tracking-[0.08em] text-[var(--text-dim)] transition-colors hover:text-[var(--accent)]"
             >
               {s.label}
             </button>
           ))}
         </nav>
 
-        <div className="ml-auto flex items-center gap-2">
-          <button
-            type="button"
-            onClick={toggle}
-            aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
-            className="grid h-9 w-9 place-items-center rounded-lg text-[var(--text-dim)] transition-colors hover:bg-[var(--surface-3)] hover:text-[var(--text)]"
-          >
-            {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
-          </button>
-          <Link
-            to="/app"
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[var(--text)] px-3.5 text-[13px] font-semibold text-[var(--bg)] transition-opacity hover:opacity-90 max-sm:hidden"
-          >
-            Open console <ArrowRight size={14} />
-          </Link>
-          <button
-            type="button"
-            onClick={() => setOpen((o) => !o)}
-            aria-label={open ? "Close menu" : "Open menu"}
-            aria-expanded={open}
-            className="grid h-9 w-9 place-items-center rounded-lg text-[var(--text-dim)] hover:bg-[var(--surface-3)] md:hidden"
-          >
-            {open ? <X size={18} /> : <Menu size={18} />}
-          </button>
-        </div>
+        <Link
+          to="/app"
+          className="font-display ml-auto inline-flex h-11 items-center gap-2 bg-[var(--accent)] px-5 text-[13px] font-bold uppercase tracking-[0.06em] text-[var(--on-accent)] transition-colors hover:bg-[var(--accent-2)] max-md:h-10 max-md:px-4 max-md:text-[12px]"
+        >
+          Open console
+        </Link>
       </div>
 
       {open && (
-        <nav aria-label="Sections" className="border-t border-[var(--border)] px-4 pb-4 pt-2 md:hidden">
+        <nav aria-label="Sections" className="border-t border-[var(--border)] px-4 pb-5 pt-2 lg:hidden">
           {SECTIONS.map((s) => (
             <button
               key={s.id}
               type="button"
               onClick={() => go(s.id)}
-              className="block w-full rounded-lg px-3 py-3 text-left text-[15px] font-medium text-[var(--text-dim)] hover:bg-[var(--surface-3)]"
+              className="font-display flex w-full items-center justify-between border-b border-[var(--border)] py-4 text-left text-[20px] font-bold uppercase"
             >
-              {s.label}
+              {s.label} <ArrowRight size={18} className="text-[var(--accent)]" />
             </button>
           ))}
-          <Link to="/app" className="brand-gradient mt-2 flex h-11 items-center justify-center gap-2 rounded-xl text-[14.5px] font-semibold text-white">
-            Open console <ArrowRight size={15} />
-          </Link>
         </nav>
       )}
     </header>
@@ -194,7 +167,7 @@ function Nav() {
 }
 
 /* ----------------------------------------------------------------------------
- * Hero
+ * Hero: giant wordmark, rotating badge, live demo
  * ------------------------------------------------------------------------- */
 
 function StatusBadge({ info }: { info: ApiInfo | null }) {
@@ -205,7 +178,7 @@ function StatusBadge({ info }: { info: ApiInfo | null }) {
     : info ? `v${info.version} live${info.llm_enabled ? " · AI replies on" : ""}`
     : "API online";
   return (
-    <span className="inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] py-1 pl-2.5 pr-3 text-[12.5px] font-medium text-[var(--text-dim)] shadow-[var(--shadow-sm)]">
+    <span className="font-display inline-flex items-center gap-2 border border-[var(--border-strong)] px-3 py-1.5 text-[11.5px] font-bold uppercase tracking-[0.08em] text-[var(--text-dim)]">
       <StatusDot online={online} />
       {label}
     </span>
@@ -213,53 +186,159 @@ function StatusBadge({ info }: { info: ApiInfo | null }) {
 }
 
 function Hero({ info }: { info: ApiInfo | null }) {
-  return (
-    <section className="relative overflow-hidden">
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(60%_50%_at_20%_0%,color-mix(in_srgb,var(--accent)_16%,transparent),transparent),radial-gradient(40%_40%_at_100%_10%,color-mix(in_srgb,var(--accent-2)_14%,transparent),transparent)]"
-      />
-      <div
-        aria-hidden
-        className="pointer-events-none absolute inset-0 -z-10 opacity-[0.35] [background-image:linear-gradient(var(--border)_1px,transparent_1px),linear-gradient(90deg,var(--border)_1px,transparent_1px)] [background-size:44px_44px] [mask-image:radial-gradient(70%_60%_at_50%_0%,black,transparent)]"
-      />
-      <div className="mx-auto grid max-w-[1180px] grid-cols-[1.05fr_1fr] items-center gap-14 px-6 pb-20 pt-16 max-lg:grid-cols-1 max-lg:gap-12 max-md:px-4 max-md:pb-14 max-md:pt-10">
-        <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
-          <StatusBadge info={info} />
-          <h1 className="mt-6 text-[56px] font-semibold leading-[1.04] tracking-[-0.03em] max-lg:text-[48px] max-md:text-[38px]">
-            Payment questions,
-            <br />
-            <span className="bg-[linear-gradient(135deg,var(--accent),var(--accent-2))] bg-clip-text text-transparent">answered by specialists.</span>
-          </h1>
-          <p className="mt-6 max-w-[540px] text-[17px] leading-relaxed text-[var(--text-dim)] max-md:text-[15.5px]">
-            PayPilot is an AI operations assistant for payments teams. Ask in plain English and it routes your question to the
-            right agent, checks live Razorpay data and your policy docs, and answers with the evidence attached.
-          </p>
-          <div className="mt-8 flex flex-wrap gap-3">
-            <PrimaryLink to="/app/chat">
-              Start a conversation <ArrowRight size={16} />
-            </PrimaryLink>
-            <SecondaryLink to="/app">View the dashboard</SecondaryLink>
-          </div>
-          <ul className="mt-8 flex flex-wrap gap-x-6 gap-y-2 text-[13px] text-[var(--text-muted)]">
-            {["Payments, refunds, fraud and reconciliation", "Answers stream in real time", "Every answer shows its sources"].map((t) => (
-              <li key={t} className="flex items-center gap-1.5">
-                <Check size={14} className="text-[var(--ok)]" /> {t}
-              </li>
-            ))}
-          </ul>
-        </motion.div>
+  const ref = useRef<HTMLElement>(null);
+  // Scroll-linked motion only moves when the visitor scrolls, so it stays on
+  // even with "reduce motion"; looping CSS animations are still turned off.
+  const reduce = false as boolean;
+  // The hero is taller than the screen; its content stays pinned while the
+  // 3D scene plays through as you scroll.
+  const { scrollYProgress } = useScroll({ target: ref, offset: ["start start", "end end"] });
+  const wordY = useTransform(scrollYProgress, [0, 1], [0, reduce ? 0 : -60]);
+  const wordX = useTransform(scrollYProgress, [0, 1], ["0%", reduce ? "0%" : "-38%"]);
+  const wordOpacity = useTransform(scrollYProgress, [0.2, 0.9], [1, reduce ? 1 : 0.18]);
+  const copyOpacity = useTransform(scrollYProgress, [0, 0.35], [1, reduce ? 1 : 0]);
+  const ctaY = useTransform(scrollYProgress, [0, 1], [0, reduce ? 0 : 30]);
 
-        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.55, delay: 0.1 }}>
-          <LiveDemo />
-        </motion.div>
+  return (
+    <section ref={ref} className="relative h-[220vh] max-md:h-[170vh]">
+      <div className="sticky top-[76px] h-[calc(100dvh-76px)] overflow-hidden max-md:top-16 max-md:h-[calc(100dvh-64px)]">
+        <div aria-hidden className="grid-lines pointer-events-none absolute inset-0 -z-10 [mask-image:radial-gradient(80%_70%_at_50%_10%,black,transparent)]" />
+        <div className={`${WRAP} relative flex h-full flex-col pt-12 pb-10 max-md:pt-7 max-md:pb-7`}>
+          <motion.div
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            style={{ opacity: copyOpacity }}
+            className="flex flex-wrap items-start justify-between gap-5"
+          >
+            <p className="max-w-[560px] text-[20px] leading-snug text-[var(--text-dim)] max-md:text-[16px]">
+              Ask any payment question in plain English. PayPilot routes it to the right agent, checks live data and your
+              policies, and answers with the evidence attached.
+            </p>
+            <StatusBadge info={info} />
+          </motion.div>
+
+          <motion.h1
+            initial={{ opacity: 0, y: 40 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8, ease: [0.2, 0.7, 0.2, 1] }}
+            style={{ x: wordX, y: wordY, opacity: wordOpacity }}
+            className="relative z-0 mt-10 select-none whitespace-nowrap text-[clamp(64px,16.6vw,232px)] font-bold uppercase leading-[0.82] tracking-[-0.045em] max-md:mt-7"
+          >
+            PayPilot<span className="text-[var(--accent)]">.</span>
+            <span className="sr-only"> AI operations for payments teams</span>
+          </motion.h1>
+
+          {/* 3D scene: overlaps the wordmark on large screens, centred below it on phones. */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.85 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ duration: 0.9, delay: 0.3, ease: [0.2, 0.7, 0.2, 1] }}
+            className="absolute z-10 lg:right-[10%] lg:top-[44%] max-lg:left-1/2 max-lg:top-[50%] max-lg:-translate-x-1/2"
+          >
+            <div className="origin-top max-lg:scale-[0.8] max-md:scale-[0.62]">
+              <PaymentStack3D progress={scrollYProgress} />
+            </div>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.25 }}
+            style={{ y: ctaY }}
+            className="relative z-20 mt-auto flex items-end justify-between gap-6"
+          >
+            <div>
+              <h2 className="text-[44px] font-bold leading-[1.02] tracking-[-0.02em] max-md:text-[28px]">
+                Payment ops,
+                <br />
+                <span className="text-[var(--accent)]">on autopilot.</span>
+              </h2>
+              <div className="mt-7 flex flex-wrap gap-3 max-md:mt-5">
+                <PrimaryLink to="/app/chat">
+                  Start a conversation <ArrowRight size={16} />
+                </PrimaryLink>
+                <SecondaryLink to="/app">View dashboard</SecondaryLink>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => scrollToSection("try")}
+              className="font-display inline-flex shrink-0 items-center gap-2 text-[13px] font-bold uppercase tracking-[0.1em] text-[var(--text-muted)] hover:text-[var(--text)] max-lg:hidden"
+            >
+              <ArrowDown size={15} className="animate-bounce" /> Scroll down
+            </button>
+          </motion.div>
+        </div>
       </div>
     </section>
   );
 }
 
 /* ----------------------------------------------------------------------------
- * Live numbers (all from the API; hidden when the API can't be reached)
+ * Try it live
+ * ------------------------------------------------------------------------- */
+
+function TryLive() {
+  return (
+    <section id="try" className="scroll-mt-20 border-t border-[var(--border)] py-28 max-md:py-16">
+      <div className={`${WRAP} grid grid-cols-[1fr_1.1fr] items-center gap-16 max-lg:grid-cols-1 max-lg:gap-10`}>
+        <Reveal>
+          <SectionTitle
+            eyebrow="Try it live"
+            title={
+              <>
+                Ask it <span className="text-[var(--accent)]">anything.</span>
+              </>
+            }
+            body="Your question goes to the same agents the console uses, and the answer streams back with the data behind it."
+          />
+          <ul className="mt-8 space-y-3 text-[15px] text-[var(--text-dim)]">
+            {["Payments, refunds, fraud and reconciliation", "Answers stream in real time", "Every answer shows its sources"].map((t) => (
+              <li key={t} className="flex items-center gap-3">
+                <span className="grid h-5 w-5 shrink-0 place-items-center bg-[var(--accent)] text-[var(--on-accent)]">
+                  <Check size={13} strokeWidth={3} />
+                </span>
+                {t}
+              </li>
+            ))}
+          </ul>
+        </Reveal>
+        <Reveal delay={0.1}>
+          <LiveDemo />
+        </Reveal>
+      </div>
+    </section>
+  );
+}
+
+/* ----------------------------------------------------------------------------
+ * Lime marquee band
+ * ------------------------------------------------------------------------- */
+
+const MARQUEE = ["Failed payments", "Refund status", "Settlement reconciliation", "Fraud scoring", "Policy answers", "Conversation memory"];
+
+function Marquee() {
+  const row = [...MARQUEE, ...MARQUEE];
+  return (
+    <div aria-hidden className="overflow-hidden border-y border-[var(--accent)] bg-[var(--accent)] py-4 text-[var(--on-accent)]">
+      <div className="marquee flex w-max">
+        {[0, 1].map((k) => (
+          <div key={k} className="flex shrink-0">
+            {row.map((t, i) => (
+              <span key={`${k}-${i}`} className="font-display flex items-center gap-8 px-4 text-[22px] font-bold uppercase tracking-[-0.01em] max-md:text-[17px]">
+                {t} <Plus size={18} strokeWidth={3} />
+              </span>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ----------------------------------------------------------------------------
+ * Statement + live numbers (all from the API; hidden when unreachable)
  * ------------------------------------------------------------------------- */
 
 function formatUptime(s: number) {
@@ -268,7 +347,7 @@ function formatUptime(s: number) {
   return `${Math.round(s / 86400)} d`;
 }
 
-function LiveNumbers({ info, stats, agentCount }: { info: ApiInfo | null; stats: Stats | null; agentCount: number | null }) {
+function Numbers({ info, stats, agentCount }: { info: ApiInfo | null; stats: Stats | null; agentCount: number | null }) {
   const items: { label: string; value: string; hint: string }[] = [];
   if (stats) items.push({ label: "Questions answered", value: stats.total.toLocaleString(), hint: stats.last_24h != null ? `${stats.last_24h} in the last 24 hours` : "since the last restart" });
   if (agentCount != null) items.push({ label: "Specialist agents", value: String(agentCount), hint: "plus a router that picks between them" });
@@ -276,26 +355,47 @@ function LiveNumbers({ info, stats, agentCount }: { info: ApiInfo | null; stats:
   if (info) items.push({ label: "Payment data", value: info.razorpay_mode === "live" ? "Live" : "Sandbox", hint: info.razorpay_mode === "live" ? "connected to Razorpay" : "deterministic test data" });
   if (info && items.length < 4) items.push({ label: "Uptime", value: formatUptime(info.uptime_s), hint: `${info.environment} · v${info.version}` });
 
-  if (!items.length) return null;
   return (
-    <section aria-label="Live numbers from this server" className="border-y border-[var(--border)] bg-[var(--surface)]">
-      <div className="mx-auto grid max-w-[1180px] grid-cols-4 divide-x divide-[var(--border)] px-6 max-lg:grid-cols-2 max-lg:divide-x-0 max-md:px-4">
-        {items.slice(0, 4).map((it) => (
-          <div key={it.label} className="px-6 py-7 first:pl-0 max-lg:px-0 max-lg:py-5">
-            <div className="flex items-center gap-1.5 text-[12px] font-medium uppercase tracking-wider text-[var(--text-muted)]">
-              <Radio size={12} className="text-[var(--ok)]" aria-hidden /> {it.label}
-            </div>
-            <div className="mt-2 text-[30px] font-semibold tabular-nums tracking-tight">{it.value}</div>
-            <div className="mt-0.5 text-[12.5px] text-[var(--text-muted)]">{it.hint}</div>
+    <section id="numbers" className="scroll-mt-20 py-32 max-md:py-20">
+      <div className={WRAP}>
+        <Reveal>
+          <SectionTitle
+            eyebrow="Payments ops, anywhere"
+            title={
+              <>
+                Every payment question,{" "}
+                <span className="text-[var(--accent)]">answered with evidence.</span>
+              </>
+            }
+            body="Stop jumping between the Razorpay dashboard, a policy wiki and a spreadsheet. PayPilot pulls them together, explains the answer and shows the data it used."
+          />
+        </Reveal>
+
+        {items.length > 0 && (
+          <div className="mt-20 grid grid-cols-4 gap-5 max-lg:grid-cols-2 max-sm:grid-cols-1">
+            {items.slice(0, 4).map((it, i) => (
+              <Reveal key={it.label} delay={i * 0.08}>
+                <div className="flex h-full min-h-[200px] flex-col justify-between bg-white p-7 text-[#141414] transition-transform hover:-translate-y-1 max-md:min-h-[160px]">
+                  <div className="font-display flex items-center justify-between text-[11.5px] font-bold uppercase tracking-[0.1em] text-[#5b6160]">
+                    {it.label}
+                    <span aria-hidden className="h-2.5 w-2.5 bg-[#9ef500]" />
+                  </div>
+                  <div>
+                    <div className="font-display text-[52px] font-bold leading-none tracking-[-0.03em] tabular-nums max-md:text-[44px]">{it.value}</div>
+                    <div className="mt-2 text-[13.5px] text-[#5b6160]">{it.hint}</div>
+                  </div>
+                </div>
+              </Reveal>
+            ))}
           </div>
-        ))}
+        )}
       </div>
     </section>
   );
 }
 
 /* ----------------------------------------------------------------------------
- * Features
+ * Features (ruled grid)
  * ------------------------------------------------------------------------- */
 
 const FEATURES: { icon: LucideIcon; title: string; body: string }[] = [
@@ -309,22 +409,23 @@ const FEATURES: { icon: LucideIcon; title: string; body: string }[] = [
 
 function Features() {
   return (
-    <section id="features" className="scroll-mt-20 py-24 max-md:py-16">
-      <div className="mx-auto max-w-[1180px] px-6 max-md:px-4">
-        <SectionHeading
-          eyebrow="Features"
-          title="Everything a payments ops desk asks, in one place"
-          body="Stop jumping between the Razorpay dashboard, a policy wiki and a spreadsheet. PayPilot pulls them together and explains the answer."
-        />
-        <div className="mt-14 grid grid-cols-3 gap-5 max-lg:grid-cols-2 max-sm:grid-cols-1">
+    <section id="features" className="scroll-mt-20 border-t border-[var(--border)] py-32 max-md:py-20">
+      <div className={WRAP}>
+        <Reveal>
+          <SectionTitle eyebrow="Features" title="Everything a payments desk asks, in one place." />
+        </Reveal>
+        <div className="mt-16 grid grid-cols-3 border-l border-t border-[var(--border)] max-lg:grid-cols-2 max-sm:grid-cols-1">
           {FEATURES.map((f, i) => (
-            <Reveal key={f.title} delay={i * 0.05}>
-              <div className="group h-full rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-sm)] transition-all hover:-translate-y-0.5 hover:border-[var(--border-strong)] hover:shadow-[var(--shadow-md)]">
-                <div className="grid h-10 w-10 place-items-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent-text)]">
-                  <f.icon size={19} />
+            <Reveal key={f.title} delay={(i % 3) * 0.07} className="border-b border-r border-[var(--border)]">
+              <div className="group relative h-full p-9 transition-colors hover:bg-[var(--surface)] max-md:p-6">
+                <div className="flex items-start justify-between">
+                  <div className="grid h-14 w-14 place-items-center rounded-full bg-[var(--surface-3)] text-[var(--accent)] transition-colors group-hover:bg-[var(--accent)] group-hover:text-[var(--on-accent)]">
+                    <f.icon size={22} />
+                  </div>
+                  <span className="font-mono text-[12px] text-[var(--text-muted)]">{String(i + 1).padStart(2, "0")}</span>
                 </div>
-                <h3 className="mt-5 text-[16px] font-semibold tracking-tight">{f.title}</h3>
-                <p className="mt-2 text-[14px] leading-relaxed text-[var(--text-dim)]">{f.body}</p>
+                <h3 className="mt-10 text-[24px] font-bold tracking-[-0.01em]">{f.title}</h3>
+                <p className="mt-3 text-[15px] leading-relaxed text-[var(--text-dim)]">{f.body}</p>
               </div>
             </Reveal>
           ))}
@@ -335,88 +436,7 @@ function Features() {
 }
 
 /* ----------------------------------------------------------------------------
- * Agents (from /api/agents)
- * ------------------------------------------------------------------------- */
-
-function Agents() {
-  const { agents, error, retry } = useAgentsState();
-  return (
-    <section id="agents" className="scroll-mt-20 border-y border-[var(--border)] bg-[var(--surface-2)] py-24 max-md:py-16">
-      <div className="mx-auto max-w-[1180px] px-6 max-md:px-4">
-        <SectionHeading
-          eyebrow="The team"
-          title="Five agents, each with one job"
-          body="These are the agents running on this server right now. Click any example to ask it yourself."
-        />
-        {error && !agents ? (
-          <div className="mt-10 text-center text-[14px] text-[var(--text-muted)]">
-            Couldn't load the agents from the API.{" "}
-            <button type="button" onClick={retry} className="font-medium text-[var(--accent-text)] hover:underline">
-              Try again
-            </button>
-          </div>
-        ) : (
-          <div className="mt-14 grid grid-cols-3 gap-5 max-lg:grid-cols-2 max-sm:grid-cols-1">
-            {(agents ?? Array.from({ length: 5 }, () => null)).map((agent, i) =>
-              agent ? (
-                <Reveal key={agent.id} delay={i * 0.05} className={i === 0 ? "lg:col-span-1" : ""}>
-                  <AgentCard {...agent} icon={AGENT_ICONS[agent.id] ?? Bot} />
-                </Reveal>
-              ) : (
-                <div key={i} className="skeleton h-[220px] rounded-2xl" />
-              ),
-            )}
-            {agents && (
-              <Reveal delay={0.25}>
-                <div className="flex h-full flex-col justify-center rounded-2xl border border-dashed border-[var(--border-strong)] p-6">
-                  <GitBranch size={20} className="text-[var(--accent-text)]" />
-                  <h3 className="mt-4 text-[16px] font-semibold">Plus a router</h3>
-                  <p className="mt-2 text-[14px] leading-relaxed text-[var(--text-dim)]">
-                    Classifies every question by intent and extracts IDs like <code className="inline-code">pay_…</code> and{" "}
-                    <code className="inline-code">stl_…</code> before any agent runs.
-                  </p>
-                </div>
-              </Reveal>
-            )}
-          </div>
-        )}
-      </div>
-    </section>
-  );
-}
-
-function AgentCard({ label, color, description, example, tools, icon: Icon }: { label: string; color: string; description: string; example: string; tools?: string[]; icon: LucideIcon }) {
-  return (
-    <div className="flex h-full flex-col rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-[var(--shadow-sm)]">
-      <div className="flex items-center gap-3">
-        <div className="grid h-10 w-10 place-items-center rounded-xl" style={{ background: `color-mix(in srgb, ${color} 14%, transparent)`, color }}>
-          <Icon size={19} />
-        </div>
-        <h3 className="text-[16px] font-semibold tracking-tight">{label}</h3>
-      </div>
-      <p className="mt-4 flex-1 text-[14px] leading-relaxed text-[var(--text-dim)]">{description}</p>
-      {tools && tools.length > 0 && (
-        <div className="mt-4 flex flex-wrap gap-1.5">
-          {tools.map((t) => (
-            <code key={t} className="inline-code">
-              {t}
-            </code>
-          ))}
-        </div>
-      )}
-      <Link
-        to={`/app/chat?q=${encodeURIComponent(example)}`}
-        className="mt-5 flex items-center justify-between gap-2 rounded-xl bg-[var(--surface-3)] px-3.5 py-2.5 text-[13px] text-[var(--text-dim)] transition-colors hover:text-[var(--text)]"
-      >
-        <span className="truncate">“{example}”</span>
-        <ArrowRight size={14} className="shrink-0" />
-      </Link>
-    </div>
-  );
-}
-
-/* ----------------------------------------------------------------------------
- * How it works
+ * How it works (big outlined numerals)
  * ------------------------------------------------------------------------- */
 
 const STEPS = [
@@ -427,19 +447,23 @@ const STEPS = [
 
 function HowItWorks() {
   return (
-    <section id="how" className="scroll-mt-20 py-24 max-md:py-16">
-      <div className="mx-auto max-w-[1180px] px-6 max-md:px-4">
-        <SectionHeading eyebrow="How it works" title="From question to verified answer in seconds" />
-        <ol className="relative mt-14 grid grid-cols-3 gap-6 max-lg:grid-cols-1">
-          <div aria-hidden className="absolute left-[16%] right-[16%] top-6 h-px bg-[linear-gradient(90deg,transparent,var(--border-strong),transparent)] max-lg:hidden" />
+    <section id="how" className="scroll-mt-20 border-t border-[var(--border)] py-32 max-md:py-20">
+      <div className={WRAP}>
+        <Reveal>
+          <SectionTitle eyebrow="How it works" title="From question to verified answer in seconds." />
+        </Reveal>
+        <ol className="mt-16 grid grid-cols-3 gap-10 max-lg:grid-cols-1 max-lg:gap-12">
           {STEPS.map((s, i) => (
-            <Reveal key={s.n} delay={i * 0.08}>
-              <li className="relative text-center max-lg:text-left">
-                <div className="brand-gradient relative mx-auto grid h-12 w-12 place-items-center rounded-2xl text-[14px] font-semibold text-white shadow-[0_10px_30px_-12px_var(--accent)] max-lg:mx-0">
+            <Reveal key={s.n} delay={i * 0.1}>
+              <li className="border-t-2 border-[var(--accent)] pt-6">
+                <div
+                  className="font-display text-[120px] font-bold leading-[0.85] tracking-[-0.04em] text-transparent max-md:text-[88px]"
+                  style={{ WebkitTextStroke: "1.5px var(--border-strong)" }}
+                >
                   {s.n}
                 </div>
-                <h3 className="mt-5 text-[17px] font-semibold tracking-tight">{s.title}</h3>
-                <p className="mx-auto mt-2 max-w-[320px] text-[14px] leading-relaxed text-[var(--text-dim)] max-lg:mx-0 max-lg:max-w-none">{s.body}</p>
+                <h3 className="mt-6 text-[26px] font-bold tracking-[-0.01em]">{s.title}</h3>
+                <p className="mt-3 text-[15px] leading-relaxed text-[var(--text-dim)]">{s.body}</p>
               </li>
             </Reveal>
           ))}
@@ -489,23 +513,22 @@ function Developers({ info }: { info: ApiInfo | null }) {
   const code = snippets(origin, !!info?.auth_required)[lang];
 
   return (
-    <section id="developers" className="scroll-mt-20 border-y border-[var(--border)] bg-[var(--surface-2)] py-24 max-md:py-16">
-      <div className="mx-auto grid max-w-[1180px] grid-cols-[1fr_1.15fr] items-center gap-14 px-6 max-lg:grid-cols-1 max-md:px-4">
-        <div>
-          <Eyebrow>Developers</Eyebrow>
-          <h2 className="mt-3 text-[34px] font-semibold leading-[1.15] tracking-tight max-md:text-[27px]">A clean REST API behind every screen</h2>
-          <p className="mt-4 text-[16px] leading-relaxed text-[var(--text-dim)]">
+    <section id="developers" className="scroll-mt-20 border-t border-[var(--border)] py-32 max-md:py-20">
+      <div className={`${WRAP} grid grid-cols-[1fr_1.15fr] items-center gap-16 max-lg:grid-cols-1`}>
+        <Reveal>
+          <SectionTitle eyebrow="Developers" title="A clean REST API behind every screen." />
+          <p className="mt-5 text-[17px] leading-relaxed text-[var(--text-dim)]">
             Everything in the console is built on a public, documented API. Plug PayPilot into your support desk, Slack bot or
             internal tools.
           </p>
-          <ul className="mt-7 space-y-3.5 text-[14px]">
+          <ul className="mt-8 space-y-4 text-[15px]">
             {[
               { icon: Sparkles, text: <><code className="inline-code">POST /chat/stream</code> streams agent steps and tokens as server-sent events</> },
               { icon: History, text: <><code className="inline-code">/api/conversations</code> lists, reopens and deletes saved chats</> },
               { icon: KeyRound, text: <>API keys via <code className="inline-code">X-API-Key</code>, per-client rate limits and request IDs on every response</> },
             ].map((item, i) => (
               <li key={i} className="flex gap-3">
-                <item.icon size={17} className="mt-0.5 shrink-0 text-[var(--accent-text)]" />
+                <item.icon size={18} className="mt-0.5 shrink-0 text-[var(--accent)]" />
                 <span className="leading-relaxed text-[var(--text-dim)]">{item.text}</span>
               </li>
             ))}
@@ -514,44 +537,46 @@ function Developers({ info }: { info: ApiInfo | null }) {
             href={`${origin}/api/docs`}
             target="_blank"
             rel="noreferrer"
-            className="mt-8 inline-flex items-center gap-1.5 text-[14px] font-semibold text-[var(--accent-text)] hover:underline"
+            className="font-display mt-9 inline-flex items-center gap-2 border-b-2 border-[var(--accent)] pb-1 text-[13.5px] font-bold uppercase tracking-[0.06em] hover:text-[var(--accent)]"
           >
-            Open the interactive API reference <ArrowRight size={15} />
+            Open the API reference <ArrowUpRight size={16} />
           </a>
-        </div>
+        </Reveal>
 
-        <div className="overflow-hidden rounded-2xl border border-[#262a36] bg-[#0d0f15] shadow-[var(--shadow-md)]">
-          <div className="flex items-center gap-1 border-b border-[#262a36] px-2 py-2">
-            {(["curl", "js", "python"] as Lang[]).map((l) => (
+        <Reveal delay={0.1}>
+          <div className="overflow-hidden border border-[var(--border-strong)] bg-[#0c0c0c]">
+            <div className="flex items-center gap-1 border-b border-[var(--border)] px-2 py-2">
+              {(["curl", "js", "python"] as Lang[]).map((l) => (
+                <button
+                  key={l}
+                  type="button"
+                  onClick={() => setLang(l)}
+                  aria-pressed={lang === l}
+                  className={`font-display px-3 py-1.5 text-[12px] font-bold uppercase tracking-[0.06em] transition-colors ${lang === l ? "bg-[var(--accent)] text-[var(--on-accent)]" : "text-[var(--text-muted)] hover:text-white"}`}
+                >
+                  {l === "curl" ? "cURL" : l === "js" ? "JavaScript" : "Python"}
+                </button>
+              ))}
               <button
-                key={l}
                 type="button"
-                onClick={() => setLang(l)}
-                aria-pressed={lang === l}
-                className={`rounded-md px-3 py-1.5 text-[12.5px] font-medium transition-colors ${lang === l ? "bg-[#1d2130] text-white" : "text-[#8a8fa3] hover:text-white"}`}
+                onClick={() => navigator.clipboard?.writeText(code).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); })}
+                className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-1.5 text-[12px] text-[var(--text-muted)] hover:text-white"
               >
-                {l === "curl" ? "cURL" : l === "js" ? "JavaScript" : "Python"}
+                {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? "Copied" : "Copy"}
               </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => navigator.clipboard?.writeText(code).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1200); })}
-              className="ml-auto inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-[12px] text-[#8a8fa3] hover:text-white"
-            >
-              {copied ? <Check size={13} /> : <Copy size={13} />} {copied ? "Copied" : "Copy"}
-            </button>
+            </div>
+            <pre className="overflow-x-auto p-6 text-[13px] leading-[1.75] text-[#e8ece9]">
+              <code>{code}</code>
+            </pre>
           </div>
-          <pre className="overflow-x-auto p-5 text-[13px] leading-[1.7] text-[#e3e6ef]">
-            <code>{code}</code>
-          </pre>
-        </div>
+        </Reveal>
       </div>
     </section>
   );
 }
 
 /* ----------------------------------------------------------------------------
- * FAQ + CTA + footer
+ * FAQ, final CTA, footer
  * ------------------------------------------------------------------------- */
 
 function Faq({ info }: { info: ApiInfo | null }) {
@@ -577,17 +602,21 @@ function Faq({ info }: { info: ApiInfo | null }) {
     },
   ];
   return (
-    <section id="faq" className="scroll-mt-20 py-24 max-md:py-16">
-      <div className="mx-auto max-w-[760px] px-6 max-md:px-4">
-        <SectionHeading eyebrow="FAQ" title="Questions, answered" />
-        <div className="mt-12 divide-y divide-[var(--border)] rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
+    <section id="faq" className="scroll-mt-20 border-t border-[var(--border)] py-32 max-md:py-20">
+      <div className={`${WRAP} grid grid-cols-[1fr_1.4fr] gap-16 max-lg:grid-cols-1 max-lg:gap-10`}>
+        <Reveal>
+          <SectionTitle eyebrow="FAQ" title="Questions, answered." />
+        </Reveal>
+        <div className="border-t border-[var(--border)]">
           {items.map((it) => (
-            <details key={it.q} className="group px-6 py-5 max-md:px-4">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-[15px] font-semibold [&::-webkit-details-marker]:hidden">
+            <details key={it.q} className="group border-b border-[var(--border)] py-7">
+              <summary className="font-display flex cursor-pointer list-none items-center justify-between gap-6 text-[21px] font-bold max-md:text-[18px] [&::-webkit-details-marker]:hidden">
                 {it.q}
-                <ChevronDown size={17} className="shrink-0 text-[var(--text-muted)] transition-transform group-open:rotate-180" />
+                <span className="grid h-9 w-9 shrink-0 place-items-center border border-[var(--border-strong)] text-[var(--accent)] transition-transform group-open:rotate-45">
+                  <Plus size={18} />
+                </span>
               </summary>
-              <p className="mt-3 text-[14.5px] leading-relaxed text-[var(--text-dim)]">{it.a}</p>
+              <p className="mt-4 max-w-[640px] text-[15.5px] leading-relaxed text-[var(--text-dim)]">{it.a}</p>
             </details>
           ))}
         </div>
@@ -598,21 +627,20 @@ function Faq({ info }: { info: ApiInfo | null }) {
 
 function FinalCta() {
   return (
-    <section className="px-6 pb-24 max-md:px-4 max-md:pb-16">
-      <div className="brand-gradient relative mx-auto max-w-[1180px] overflow-hidden rounded-3xl px-10 py-16 text-center text-white max-md:px-6 max-md:py-12">
-        <div aria-hidden className="absolute inset-0 opacity-20 [background-image:radial-gradient(white_1px,transparent_1px)] [background-size:22px_22px]" />
-        <div className="relative">
-          <h2 className="text-[34px] font-semibold tracking-tight max-md:text-[26px]">Ask your first question</h2>
-          <p className="mx-auto mt-3 max-w-lg text-[16px] text-white/85">No setup needed. Open the console and ask about any payment, refund or settlement.</p>
-          <div className="mt-8 flex flex-wrap justify-center gap-3">
-            <Link to="/app/chat" className="inline-flex h-11 items-center gap-2 rounded-xl bg-white px-5 text-[14.5px] font-semibold text-[#2d2580] transition-transform hover:-translate-y-px">
-              Open chat <ArrowRight size={16} />
-            </Link>
-            <Link to="/app" className="inline-flex h-11 items-center rounded-xl border border-white/40 px-5 text-[14.5px] font-semibold text-white hover:bg-white/10">
-              See the dashboard
-            </Link>
+    <section className="border-t border-[var(--border)] py-32 max-md:py-20">
+      <div className={`${WRAP} text-center`}>
+        <Reveal>
+          <h2 className="mx-auto max-w-[1000px] text-[88px] font-bold uppercase leading-[0.92] tracking-[-0.035em] max-lg:text-[64px] max-md:text-[40px]">
+            Let's fix your <span className="text-[var(--accent)]">payment ops.</span>
+          </h2>
+          <p className="mx-auto mt-6 max-w-lg text-[17px] text-[var(--text-dim)]">No setup needed. Open the console and ask about any payment, refund or settlement.</p>
+          <div className="mt-10 flex flex-wrap justify-center gap-3">
+            <PrimaryLink to="/app/chat" className="h-14 px-8 text-[15px]">
+              Let's talk <ArrowRight size={18} />
+            </PrimaryLink>
+            <SecondaryLink to="/app">See the dashboard</SecondaryLink>
           </div>
-        </div>
+        </Reveal>
       </div>
     </section>
   );
@@ -620,35 +648,37 @@ function FinalCta() {
 
 function Footer({ info }: { info: ApiInfo | null }) {
   const origin = (import.meta.env.VITE_API_URL as string | undefined) || window.location.origin;
+  const link = "font-display text-[12.5px] font-bold uppercase tracking-[0.08em] text-[var(--text-dim)] hover:text-[var(--accent)]";
   return (
-    <footer className="border-t border-[var(--border)]">
-      <div className="mx-auto flex max-w-[1180px] flex-wrap items-center justify-between gap-6 px-6 py-10 max-md:px-4">
-        <div className="flex items-center gap-2.5">
-          <BrandMark size={26} />
-          <div>
-            <div className="text-[14px] font-semibold">PayPilot</div>
-            <div className="text-[12px] text-[var(--text-muted)]">AI operations for payments teams{info ? ` · v${info.version}` : ""}</div>
-          </div>
-        </div>
-        <nav aria-label="Footer" className="flex flex-wrap gap-x-6 gap-y-2 text-[13px] text-[var(--text-dim)]">
-          <Link to="/app" className="hover:text-[var(--text)]">Dashboard</Link>
-          <Link to="/app/chat" className="hover:text-[var(--text)]">Chat</Link>
-          <Link to="/app/agents" className="hover:text-[var(--text)]">Agents</Link>
-          <a href={`${origin}/api/docs`} target="_blank" rel="noreferrer" className="hover:text-[var(--text)]">API reference</a>
-          <a href="https://github.com/aryan2006-singh/paypilot" target="_blank" rel="noreferrer" className="hover:text-[var(--text)]">GitHub</a>
+    <footer className="overflow-hidden border-t border-[var(--border)]">
+      <div className={`${WRAP} flex flex-wrap items-center justify-between gap-6 py-10`}>
+        <nav aria-label="Footer" className="flex flex-wrap gap-x-7 gap-y-3">
+          <Link to="/app" className={link}>Dashboard</Link>
+          <Link to="/app/chat" className={link}>Chat</Link>
+          <Link to="/app/agents" className={link}>Agents</Link>
+          <a href={`${origin}/api/docs`} target="_blank" rel="noreferrer" className={link}>API reference</a>
+          <a href="https://github.com/aryan2006-singh/paypilot" target="_blank" rel="noreferrer" className={link}>GitHub</a>
         </nav>
+        <div className="text-[13px] text-[var(--text-muted)]">
+          © {new Date().getFullYear()} PayPilot · AI operations for payments teams{info ? ` · v${info.version}` : ""}
+        </div>
+      </div>
+      <div aria-hidden className={`${WRAP} select-none`}>
+        <div className="font-display -mb-[0.2em] text-[clamp(64px,17vw,240px)] font-bold uppercase leading-[0.8] tracking-[-0.045em] text-[var(--surface-3)]">
+          PayPilot<span className="text-[var(--accent)]">.</span>
+        </div>
       </div>
     </footer>
   );
 }
 
 /* ----------------------------------------------------------------------------
- * Page
+ * Page (always dark, like a product site; the console follows the theme)
  * ------------------------------------------------------------------------- */
 
 export function Landing() {
   const info = useAsync(api.info, { pollMs: 60000 });
-  // Stats need a key when auth is on; the section simply hides if they fail.
+  // Stats need a key when auth is on; the cards simply hide if they fail.
   const stats = useAsync(api.stats, { pollMs: 30000 });
   const { agents } = useAgentsState();
 
@@ -660,23 +690,26 @@ export function Landing() {
   }, []);
 
   return (
-    <div className="min-h-dvh">
+    <div className="dark min-h-dvh overflow-x-clip bg-[var(--bg)] text-[var(--text)] [color-scheme:dark]">
       <a
         href="#top"
         onClick={(e) => {
           e.preventDefault();
-          scrollToSection("features");
+          scrollToSection("numbers");
         }}
-        className="fixed left-3 top-3 z-50 -translate-y-20 rounded-lg bg-[var(--surface)] px-3 py-2 text-[13px] font-medium shadow-[var(--shadow-md)] focus:translate-y-0"
+        className="fixed left-3 top-3 z-50 -translate-y-20 bg-[var(--accent)] px-3 py-2 text-[13px] font-medium text-[var(--on-accent)] focus:translate-y-0"
       >
         Skip to content
       </a>
       <Nav />
       <main>
         <Hero info={info.data} />
-        <LiveNumbers info={info.data} stats={stats.error ? null : stats.data} agentCount={agents?.length ?? null} />
+        <Marquee />
+        <Numbers info={info.data} stats={stats.error ? null : stats.data} agentCount={agents?.length ?? null} />
+        <AgentStackScene />
+        <PhonePayScene />
+        <TryLive />
         <Features />
-        <Agents />
         <HowItWorks />
         <Developers info={info.data} />
         <Faq info={info.data} />

@@ -10,11 +10,12 @@ const media = typeof matchMedia === "function" ? matchMedia("(prefers-color-sche
 function readPref(): ThemePref {
   try {
     const saved = localStorage.getItem(KEY);
-    if (saved === "dark" || saved === "light") return saved;
+    if (saved === "dark" || saved === "light" || saved === "system") return saved;
   } catch {
-    /* storage blocked: fall back to system */
+    /* storage blocked: use the default */
   }
-  return "system";
+  // PayPilot is designed dark-first.
+  return "dark";
 }
 
 let pref: ThemePref = readPref();
@@ -38,8 +39,7 @@ media?.addEventListener("change", () => {
 function setPref(next: ThemePref) {
   pref = next;
   try {
-    if (next === "system") localStorage.removeItem(KEY);
-    else localStorage.setItem(KEY, next);
+    localStorage.setItem(KEY, next);
   } catch {
     /* ignore */
   }

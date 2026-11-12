@@ -15,11 +15,20 @@ export function BrandMark({ size = 32 }: { size?: number }) {
   return (
     <div
       aria-hidden
-      className="brand-gradient grid shrink-0 place-items-center rounded-[9px] font-bold text-white shadow-[var(--shadow-sm)]"
-      style={{ width: size, height: size, fontSize: size * 0.44 }}
+      className="brand-gradient font-display grid shrink-0 place-items-center font-bold leading-none"
+      style={{ width: size, height: size, fontSize: size * 0.6 }}
     >
       P
     </div>
+  );
+}
+
+/** Uppercase wordmark with a lime full stop. */
+export function Wordmark({ className = "" }: { className?: string }) {
+  return (
+    <span className={`font-display font-bold uppercase tracking-[0.02em] ${className}`}>
+      PayPilot<span className="text-[var(--accent)]">.</span>
+    </span>
   );
 }
 
@@ -47,14 +56,14 @@ export function Sidebar() {
       <div className="flex items-center gap-2.5 px-2 pb-5 pt-1.5">
         <BrandMark />
         <div>
-          <div className="text-[15px] font-semibold tracking-tight">PayPilot</div>
+          <Wordmark className="block text-[16px]" />
           <NavLink to="/" className="text-[11px] text-[var(--text-muted)] hover:text-[var(--text)]">← Back to website</NavLink>
         </div>
       </div>
 
       <NavLink
         to="/app/chat"
-        className="brand-gradient mb-4 flex h-9 items-center justify-center gap-2 rounded-[10px] text-[13px] font-semibold text-white shadow-[var(--shadow-sm)] transition-opacity hover:opacity-90"
+        className="brand-gradient mb-4 flex h-9 items-center justify-center gap-2 text-[12.5px] font-bold uppercase tracking-[0.06em] font-display transition-opacity hover:opacity-90"
       >
         <Sparkles size={14} aria-hidden /> Ask PayPilot
       </NavLink>
